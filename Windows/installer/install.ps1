@@ -78,19 +78,14 @@ Write-Host ""
 Write-Host "  Add the following to your ~/.claude/settings.json to enable real-time tracking:"
 Write-Host ""
 Write-Host '  {' -ForegroundColor Green
-Write-Host '    "hooks": {' -ForegroundColor Green
-Write-Host '      "Status": [{' -ForegroundColor Green
-Write-Host '        "matcher": "",' -ForegroundColor Green
-Write-Host '        "hooks": [{' -ForegroundColor Green
-Write-Host '          "type": "command",' -ForegroundColor Green
-Write-Host '          "command": "node ~/.tokenbox/hooks/status-relay.mjs"' -ForegroundColor Green
-Write-Host '        }]' -ForegroundColor Green
-Write-Host '      }]' -ForegroundColor Green
+Write-Host '    "statusLine": {' -ForegroundColor Green
+Write-Host '      "type": "command",' -ForegroundColor Green
+Write-Host '      "command": "node ~/.tokenbox/hooks/status-relay.mjs"' -ForegroundColor Green
 Write-Host '    }' -ForegroundColor Green
 Write-Host '  }' -ForegroundColor Green
 Write-Host ""
 Write-Host "  NOTE: This script does NOT modify settings.json automatically."
-Write-Host "  Please add the hook configuration manually or merge it with your existing settings."
+Write-Host "  Please add the statusLine configuration manually or merge it with your existing settings."
 Write-Host ""
 Write-Host "=== TokenBox installed successfully ===" -ForegroundColor Cyan
 Write-Host ""

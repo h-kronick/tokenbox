@@ -54,23 +54,14 @@ echo ""
 echo "  Add the following to your ~/.claude/settings.json to enable real-time tracking:"
 echo ""
 echo '  {
-    "hooks": {
-      "Status": [
-        {
-          "matcher": "",
-          "hooks": [
-            {
-              "type": "command",
-              "command": "'"$HOOK_DEST"'/status-relay.sh"
-            }
-          ]
-        }
-      ]
+    "statusLine": {
+      "type": "command",
+      "command": "'"$HOOK_DEST"'/status-relay.sh"
     }
   }'
 echo ""
 echo "  NOTE: This script does NOT modify settings.json automatically."
-echo "  Please add the hook configuration manually or merge it with your existing settings."
+echo "  Please add the statusLine configuration manually or merge it with your existing settings."
 echo ""
 echo "=== TokenBox installed successfully ==="
 echo ""

@@ -56,11 +56,11 @@ Token tracking starts automatically as you use Claude Code. The split-flap displ
 ### How it works
 
 ```
-Claude Code → Status Hook → live.json → FSEvents → App → Split-Flap UI
+Claude Code → Status Line → live.json → FSEvents → App → Split-Flap UI
 Claude Code → JSONL logs  → FSEvents → Parser   → SQLite → App
 ```
 
-1. A **Status hook** captures token data from every Claude Code interaction and writes to `~/Library/Application Support/TokenBox/live.json`
+1. A **statusLine script** captures token data from every Claude Code interaction and writes to `~/Library/Application Support/TokenBox/live.json`
 2. A **JSONL watcher** monitors `~/.claude/projects/` for session logs and backfills historical data
 3. The app reads both sources via macOS FSEvents for sub-second latency
 
@@ -120,7 +120,7 @@ Sources/
     ├── SplitFlap/ # Core animation engine
     └── ...        # Settings, Dashboard, MenuBar
 skill/             # Claude Code skill (Node.js)
-hooks/             # Status relay hook (bash)
+hooks/             # statusLine relay script (bash)
 cloud/             # Cloud Functions for sharing (Node.js, GCP)
 ```
 

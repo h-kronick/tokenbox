@@ -70,20 +70,15 @@ console.log('[4/4] Hook configuration\n');
 console.log('  Add the following to your ~/.claude/settings.json to enable real-time tracking:\n');
 
 const configSnippet = {
-  hooks: {
-    Status: [{
-      matcher: '',
-      hooks: [{
-        type: 'command',
-        command: 'node ~/.tokenbox/hooks/status-relay.mjs',
-      }],
-    }],
+  statusLine: {
+    type: 'command',
+    command: 'node ~/.tokenbox/hooks/status-relay.mjs',
   },
 };
 console.log('  ' + JSON.stringify(configSnippet, null, 2).split('\n').join('\n  '));
 
 console.log('\n  NOTE: This script does NOT modify settings.json automatically.');
-console.log('  Please add the hook configuration manually or merge it with your existing settings.\n');
+console.log('  Please add the statusLine configuration manually or merge it with your existing settings.\n');
 console.log('=== TokenBox installed successfully ===\n');
 
 console.log('To verify the hook works, run:');

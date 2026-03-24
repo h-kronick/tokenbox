@@ -48,14 +48,9 @@ powershell -ExecutionPolicy Bypass -File installer/install.ps1
 
 ```json
 {
-  "hooks": {
-    "Status": [{
-      "matcher": "",
-      "hooks": [{
-        "type": "command",
-        "command": "node ~/.tokenbox/hooks/status-relay.mjs"
-      }]
-    }]
+  "statusLine": {
+    "type": "command",
+    "command": "node ~/.tokenbox/hooks/status-relay.mjs"
   }
 }
 ```
