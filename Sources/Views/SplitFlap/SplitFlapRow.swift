@@ -13,7 +13,7 @@ struct SplitFlapRow: View {
     var soundEnabled: Bool = true
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 6) {
             ForEach(0..<moduleCount, id: \.self) { index in
                 SplitFlapModule(
                     targetCharacter: characterAt(index),

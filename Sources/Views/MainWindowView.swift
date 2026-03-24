@@ -37,22 +37,22 @@ struct MainWindowView: View {
                     showSharePopover = true
                 }
             } label: {
-                HStack(spacing: 4) {
+                HStack(spacing: 6) {
                     if sharingManager.isRegistered {
                         Image(systemName: showCopied ? "checkmark.circle.fill" : "link")
-                            .font(.system(size: 9))
+                            .font(.system(size: 13))
                         Text(showCopied ? "Copied!" : sharingManager.myShareCode)
-                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .font(.system(size: 13, weight: .medium, design: .monospaced))
                     } else {
                         Image(systemName: "person.2")
-                            .font(.system(size: 9))
+                            .font(.system(size: 13))
                         Text("Start sharing")
-                            .font(.system(size: 9, weight: .medium))
+                            .font(.system(size: 13, weight: .medium))
                     }
                 }
                 .foregroundColor(showCopied ? currentTheme.characterColor : currentTheme.labelColor.opacity(0.6))
                 .animation(.easeInOut(duration: 0.2), value: showCopied)
-                .padding(.vertical, 4)
+                .padding(.vertical, 6)
             }
             .buttonStyle(.plain)
             .popover(isPresented: $showSharePopover, arrowEdge: .bottom) {

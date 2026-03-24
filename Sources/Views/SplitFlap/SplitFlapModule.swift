@@ -35,13 +35,13 @@ struct SplitFlapModule: View {
             let h = geo.size.height
             let halfH = h / 2
             let fontSize = h * 0.65
-            let inset: CGFloat = 3
+            let inset: CGFloat = 4.5
 
             ZStack {
                 // Module housing
-                RoundedRectangle(cornerRadius: 4)
+                RoundedRectangle(cornerRadius: 6)
                     .fill(theme.flapBackground)
-                    .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
+                    .shadow(color: .black.opacity(0.3), radius: 3, y: 1.5)
 
                 VStack(spacing: 0) {
                     // === TOP HALF ===
@@ -61,14 +61,14 @@ struct SplitFlapModule: View {
                             )
                             .opacity(topAngle < -89 ? 0 : 1)
                     }
-                    .frame(height: halfH - 0.75)
+                    .frame(height: halfH - 1)
                     .clipped()
 
                     // === HINGE ===
                     Rectangle()
                         .fill(theme.hingeColor)
-                        .frame(height: 1.5)
-                        .shadow(color: .black.opacity(0.4), radius: 0.5, y: 0.5)
+                        .frame(height: 2)
+                        .shadow(color: .black.opacity(0.4), radius: 0.75, y: 0.75)
 
                     // === BOTTOM HALF ===
                     ZStack {
@@ -87,14 +87,14 @@ struct SplitFlapModule: View {
                             )
                             .opacity(bottomAngle > 89 ? 0 : 1)
                     }
-                    .frame(height: halfH - 0.75)
+                    .frame(height: halfH - 1)
                     .clipped()
                 }
                 .padding(inset)
 
                 // Inner border for depth
-                RoundedRectangle(cornerRadius: 4)
-                    .strokeBorder(theme.hingeColor.opacity(0.3), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(theme.hingeColor.opacity(0.3), lineWidth: 0.75)
             }
         }
         .aspectRatio(0.65, contentMode: .fit)

@@ -53,43 +53,43 @@ struct EInkLabelView: View {
     var body: some View {
         ZStack {
             // Panel housing — recessed e-ink screen
-            RoundedRectangle(cornerRadius: 3)
+            RoundedRectangle(cornerRadius: 5)
                 .fill(panelBackground)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 3)
-                        .strokeBorder(panelBorder, lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: 5)
+                        .strokeBorder(panelBorder, lineWidth: 0.75)
                 )
-                .shadow(color: .black.opacity(0.5), radius: 1.5, y: 1)
+                .shadow(color: .black.opacity(0.5), radius: 2, y: 1.5)
 
             VStack(spacing: 0) {
-                Spacer(minLength: 2)
+                Spacer(minLength: 3)
 
                 // Main label text
                 Text(displayText.uppercased())
-                    .font(.system(size: 22, weight: .bold, design: .monospaced))
-                    .tracking(6)
+                    .font(.system(size: 33, weight: .bold, design: .monospaced))
+                    .tracking(9)
                     .foregroundColor(panelText)
                     .opacity(isRefreshing ? 0 : 1)
 
-                Spacer(minLength: 1)
+                Spacer(minLength: 2)
 
                 // Subtitle bar (model name + resets countdown)
                 if subtitleLeft != nil || subtitleRight != nil {
                     HStack {
                         if let left = subtitleLeft {
                             Text(left)
-                                .font(.system(size: 7, weight: .medium, design: .monospaced))
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
                                 .foregroundColor(subtitleColor)
                         }
                         Spacer()
                         if let right = subtitleRight {
                             Text(right)
-                                .font(.system(size: 7, weight: .regular, design: .monospaced))
+                                .font(.system(size: 11, weight: .regular, design: .monospaced))
                                 .foregroundColor(subtitleColor)
                         }
                     }
-                    .padding(.horizontal, 6)
-                    .padding(.bottom, 3)
+                    .padding(.horizontal, 9)
+                    .padding(.bottom, 5)
                     .opacity(isRefreshing ? 0 : 1)
                 }
             }

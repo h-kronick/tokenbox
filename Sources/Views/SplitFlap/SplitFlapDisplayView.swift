@@ -54,7 +54,7 @@ struct SplitFlapDisplayView: View {
 
     var body: some View {
         SplitFlapHousing(theme: theme) {
-            VStack(spacing: 6) {
+            VStack(spacing: 9) {
                 // Row 1: Pinned label (e-ink panel with model + reset subtitle)
                 ZStack(alignment: .topTrailing) {
                     EInkLabelView(
@@ -63,7 +63,7 @@ struct SplitFlapDisplayView: View {
                         subtitleRight: resetsInString,
                         theme: theme
                     )
-                    .frame(maxWidth: .infinity, minHeight: 52, maxHeight: 52)
+                    .frame(maxWidth: .infinity, minHeight: 78, maxHeight: 78)
                     .padding(.horizontal, horizontalInset)
 
                     // Info button overlay
@@ -91,9 +91,9 @@ struct SplitFlapDisplayView: View {
                     animationSpeed: animationSpeed,
                     soundEnabled: soundEnabled
                 )
-                .frame(height: 50)
+                .frame(height: 75)
 
-                Spacer().frame(height: 2)
+                Spacer().frame(height: 3)
 
                 // Row 3: Rotating context label (e-ink panel, centered)
                 EInkLabelView(
@@ -101,7 +101,7 @@ struct SplitFlapDisplayView: View {
                     subtitleRight: contextSubtitle,
                     theme: theme
                 )
-                .frame(maxWidth: .infinity, minHeight: 44, maxHeight: 44)
+                .frame(maxWidth: .infinity, minHeight: 66, maxHeight: 66)
                 .padding(.horizontal, horizontalInset)
 
                 // Row 4: Rotating context value (7 split-flap modules)
@@ -114,7 +114,7 @@ struct SplitFlapDisplayView: View {
                     animationSpeed: animationSpeed,
                     soundEnabled: soundEnabled
                 )
-                .frame(height: 50)
+                .frame(height: 75)
             }
         }
         .onReceive(minuteTimer) { now = $0 }
@@ -126,7 +126,7 @@ struct SplitFlapDisplayView: View {
         // Each side gets (1 - 0.57) / 2 = 0.215 of the total width
         // With 16pt housing padding already applied, we need additional inset
         // relative to the content area. Approximate with fixed value.
-        56
+        84
     }
 
     // MARK: - Info Popover
