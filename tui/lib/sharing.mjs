@@ -42,8 +42,9 @@ export class SharingManager extends EventEmitter {
 
     // Start friend fetch timer if we have friends
     if (this._friends.length > 0) {
+      this._notifyFriendsChanged(); // Push friends to data manager immediately
       this._fetchTimer = setInterval(() => this._fetchAllFriends(), FETCH_INTERVAL_MS);
-      this._fetchAllFriends(); // initial fetch
+      this._fetchAllFriends(); // initial fetch from cloud
     }
   }
 
@@ -205,6 +206,7 @@ export class SharingManager extends EventEmitter {
           friend.tokens = data.todayTokens || 0;
           friend.todayDate = data.todayDate || null;
           friend.displayName = data.displayName || friend.code;
+          friend.lastTokenChange = data.lastTokenChange || data.lastUpdated || null;
           changed = true;
         }
       } catch {

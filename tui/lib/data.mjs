@@ -138,25 +138,29 @@ export class DataManager extends EventEmitter {
     const filter = this._modelFilter && this._modelFilter !== 'all' ? this._modelFilter : null;
     const now = new Date();
 
-    // Today — local timezone
-    const todayStr = _localDateStr(now);
+    // Use UTC ISO boundaries to match macOS app's Swift ISO8601DateFormatter behavior.
+    // Calendar.current.startOfDay → ISO8601DateFormatter (UTC) produces UTC timestamp strings.
+    // This ensures TUI and native app show identical token counts.
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfTomorrow = new Date(startOfToday.getTime() + 86400000);
+    const todayStart = startOfToday.toISOString();
+    const todayEnd = startOfTomorrow.toISOString();
 
     // Week — Monday of current week
-    const weekStart = new Date(now);
-    const dow = weekStart.getDay();
-    weekStart.setDate(weekStart.getDate() - (dow === 0 ? 6 : dow - 1));
-    const weekStr = _localDateStr(weekStart);
+    const dow = startOfToday.getDay();
+    const weekStart = new Date(startOfToday.getTime() - ((dow === 0 ? 6 : dow - 1)) * 86400000);
+    const weekStartStr = weekStart.toISOString();
 
     // Month — first of current month
-    const monthStr = todayStr.slice(0, 7) + '-01';
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthStartStr = monthStart.toISOString();
 
-    // All time — use a very early date
-    const allTimeStr = '2020-01-01';
+    const nowStr = now.toISOString();
 
-    this._tokens.today = this._queryOutputTokens(todayStr, todayStr, filter);
-    this._tokens.week = this._queryOutputTokens(weekStr, todayStr, filter);
-    this._tokens.month = this._queryOutputTokens(monthStr, todayStr, filter);
-    this._tokens.allTime = this._queryOutputTokens(allTimeStr, todayStr, filter);
+    this._tokens.today = this._queryOutputTokens(todayStart, todayEnd, filter);
+    this._tokens.week = this._queryOutputTokens(weekStartStr, nowStr, filter);
+    this._tokens.month = this._queryOutputTokens(monthStartStr, nowStr, filter);
+    this._tokens.allTime = this._queryOutputTokens(null, null, filter);
 
     // Emit current pinned value
     const pinnedVal = this._tokens[this._pinnedPeriod] + (this._pinnedPeriod === 'today' ? this._realtimeDelta : 0);
@@ -171,10 +175,18 @@ export class DataManager extends EventEmitter {
 
   _queryOutputTokens(from, to, modelFilter) {
     try {
-      let sql = `SELECT COALESCE(SUM(output_tokens), 0) AS total
-        FROM token_events
-        WHERE substr(timestamp, 1, 10) BETWEEN ? AND ?`;
-      const params = [from, to];
+      let sql = `SELECT COALESCE(SUM(output_tokens), 0) AS total FROM token_events WHERE 1=1`;
+      const params = [];
+
+      // Use full timestamp string comparison (matches macOS Swift ISO8601DateFormatter behavior)
+      if (from) {
+        sql += ` AND timestamp >= ?`;
+        params.push(from);
+      }
+      if (to) {
+        sql += ` AND timestamp <= ?`;
+        params.push(to);
+      }
 
       if (modelFilter) {
         sql += ` AND lower(model) LIKE '%' || lower(?) || '%'`;
