@@ -103,6 +103,10 @@ export class DataManager extends EventEmitter {
   setFriends(friends) {
     this._friends = friends || [];
     this._contextIndex = 0;
+    // Immediately show friends in context rotation
+    if (this._friends.length > 0) {
+      this._emitContextChange();
+    }
   }
 
   _startWatcher() {

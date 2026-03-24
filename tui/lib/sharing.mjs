@@ -241,10 +241,13 @@ export class SharingManager extends EventEmitter {
       try {
         const parsed = JSON.parse(friendsRaw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Map from Swift format {shareCode, displayName, ...} to our format {code, displayName}
+          // Map from Swift format — preserve token data so friends show immediately
           const mapped = parsed.map(f => ({
             code: f.shareCode || f.code,
             displayName: f.displayName || f.shareCode || f.code,
+            tokens: f.todayTokens || 0,
+            todayDate: f.todayDate || null,
+            lastTokenChange: f.lastTokenChange || null,
           }));
           this._settings.setFriends(mapped);
         }
