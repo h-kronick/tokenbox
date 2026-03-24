@@ -266,7 +266,7 @@ export class SharingManager extends EventEmitter {
 
 function _readMacDefault(key) {
   try {
-    return execSync(`defaults read com.tokenbox.app ${key}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+    return execSync(`defaults read TokenBox ${key}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
   } catch { return null; }
 }
 

@@ -166,9 +166,9 @@ if [ "$OS" = "Darwin" ]; then
 
   if [ "$KEEP_DATA" = true ]; then
     skip "Kept (--keep-data flag)"
-  elif defaults read com.tokenbox.app &>/dev/null 2>&1; then
-    defaults delete com.tokenbox.app
-    ok "Removed com.tokenbox.app defaults"
+  elif defaults read TokenBox &>/dev/null 2>&1; then
+    defaults delete TokenBox
+    ok "Removed TokenBox defaults"
   else
     skip "No preferences found"
   fi
