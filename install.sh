@@ -115,15 +115,42 @@ mkdir -p "$HOME/.claude"
 HOOK_CMD="$HOOK_DIR/status-relay.sh"
 
 if [ -f "$SETTINGS" ]; then
-  # Check if hook is already configured
+  # Check if statusLine is already configured
   if grep -q "status-relay" "$SETTINGS" 2>/dev/null; then
-    ok "Status hook already configured"
+    # Migrate old "hooks.Status" config to "statusLine" if needed
+    if grep -q '"Status"' "$SETTINGS" 2>/dev/null; then
+      cp "$SETTINGS" "$SETTINGS.bak.$(date +%s)"
+      python3 - "$SETTINGS" "$HOOK_CMD" << 'PYMIGRATE' 2>/dev/null && ok "Migrated Status hook to statusLine" || ok "Status relay already configured"
+import json, sys
+
+settings_path = sys.argv[1]
+hook_cmd = sys.argv[2]
+
+with open(settings_path, 'r') as f:
+    settings = json.loads(f.read().strip())
+
+# Remove old invalid hooks.Status key
+if 'hooks' in settings and 'Status' in settings['hooks']:
+    del settings['hooks']['Status']
+    if not settings['hooks']:
+        del settings['hooks']
+
+# Set statusLine
+settings['statusLine'] = {'type': 'command', 'command': hook_cmd}
+
+with open(settings_path, 'w') as f:
+    json.dump(settings, f, indent=2)
+    f.write('\n')
+PYMIGRATE
+    else
+      ok "Status relay already configured"
+    fi
   else
     # Back up settings before modifying
     cp "$SETTINGS" "$SETTINGS.bak.$(date +%s)"
 
-    # Merge hook into existing settings using python (available on macOS)
-    python3 - "$SETTINGS" "$HOOK_CMD" << 'PYMERGE' 2>/dev/null && ok "Status hook added to settings.json" || warn "Could not auto-configure — add hook manually (see README)"
+    # Add statusLine to existing settings using python (available on macOS)
+    python3 - "$SETTINGS" "$HOOK_CMD" << 'PYMERGE' 2>/dev/null && ok "Status relay added to settings.json" || warn "Could not auto-configure — add statusLine manually (see README)"
 import json, sys
 
 settings_path = sys.argv[1]
@@ -137,20 +164,14 @@ with open(settings_path, 'r') as f:
         print("WARNING: settings.json contains malformed JSON — skipping auto-configure.", file=sys.stderr)
         sys.exit(1)
 
-hook_entry = {
-    'matcher': '',
-    'hooks': [{'type': 'command', 'command': hook_cmd}]
-}
+# Remove old invalid hooks.Status key if present
+if 'hooks' in settings and 'Status' in settings['hooks']:
+    del settings['hooks']['Status']
+    if not settings['hooks']:
+        del settings['hooks']
 
-if 'hooks' not in settings:
-    settings['hooks'] = {}
-if 'Status' not in settings['hooks']:
-    settings['hooks']['Status'] = []
-
-# Don't add duplicate
-existing = [h for h in settings['hooks']['Status'] if any(hk.get('command','').endswith('status-relay.sh') for hk in h.get('hooks',[]))]
-if not existing:
-    settings['hooks']['Status'].append(hook_entry)
+# Set statusLine (replaces any existing)
+settings['statusLine'] = {'type': 'command', 'command': hook_cmd}
 
 with open(settings_path, 'w') as f:
     json.dump(settings, f, indent=2)
@@ -161,22 +182,13 @@ else
   # Create new settings.json
   cat > "$SETTINGS" << SETTINGSJSON
 {
-  "hooks": {
-    "Status": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOOK_CMD"
-          }
-        ]
-      }
-    ]
+  "statusLine": {
+    "type": "command",
+    "command": "$HOOK_CMD"
   }
 }
 SETTINGSJSON
-  ok "Created settings.json with status hook"
+  ok "Created settings.json with status relay"
 fi
 
 # ── 6. Install Skill ─────────────────────────────────────────────

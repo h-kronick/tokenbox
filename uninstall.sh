@@ -66,7 +66,7 @@ step "Removing Claude Code hook"
 if [ -f "$SETTINGS" ]; then
   if grep -q "status-relay" "$SETTINGS" 2>/dev/null; then
     cp "$SETTINGS" "$SETTINGS.bak.$(date +%s)"
-    python3 - "$SETTINGS" << 'PYREMOVE' 2>/dev/null && ok "Hook removed from settings.json" || warn "Could not auto-remove hook — edit $SETTINGS manually"
+    python3 - "$SETTINGS" << 'PYREMOVE' 2>/dev/null && ok "Status relay removed from settings.json" || warn "Could not auto-remove — edit $SETTINGS manually"
 import json, sys
 
 settings_path = sys.argv[1]
@@ -74,21 +74,15 @@ settings_path = sys.argv[1]
 with open(settings_path, 'r') as f:
     settings = json.load(f)
 
-if 'hooks' in settings:
-    for event_type in list(settings['hooks'].keys()):
-        entries = settings['hooks'][event_type]
-        filtered = [
-            e for e in entries
-            if not any(
-                'status-relay' in h.get('command', '')
-                for h in e.get('hooks', [])
-            )
-        ]
-        if filtered:
-            settings['hooks'][event_type] = filtered
-        else:
-            del settings['hooks'][event_type]
+# Remove statusLine if it points to status-relay
+if 'statusLine' in settings:
+    cmd = settings['statusLine'].get('command', '')
+    if 'status-relay' in cmd:
+        del settings['statusLine']
 
+# Also clean up old invalid hooks.Status key if present
+if 'hooks' in settings and 'Status' in settings['hooks']:
+    del settings['hooks']['Status']
     if not settings['hooks']:
         del settings['hooks']
 
