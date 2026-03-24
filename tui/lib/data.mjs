@@ -64,6 +64,14 @@ export class DataManager extends EventEmitter {
       clearInterval(this._rotationTimer);
       this._rotationTimer = null;
     }
+    if (this._refreshTimer) {
+      clearInterval(this._refreshTimer);
+      this._refreshTimer = null;
+    }
+    if (this._debounceTimeout) {
+      clearTimeout(this._debounceTimeout);
+      this._debounceTimeout = null;
+    }
   }
 
   getTokens() {
@@ -130,10 +138,22 @@ export class DataManager extends EventEmitter {
         }
 
         this.emit('live-update', data);
+
+        // Debounced DB refresh — matches macOS app's 500ms debounce on JSONL changes
+        this._debouncedRefresh();
       } catch {
         // Ignore read/parse errors (atomic write race)
       }
     });
+  }
+
+  _debouncedRefresh() {
+    if (this._debounceTimeout) clearTimeout(this._debounceTimeout);
+    this._debounceTimeout = setTimeout(() => {
+      this._debounceTimeout = null;
+      this._realtimeDelta = 0;
+      this._refreshTokens();
+    }, 500);
   }
 
   _refreshTokens() {
