@@ -237,7 +237,7 @@ export class DataManager extends EventEmitter {
       const idx = this._contextIndex % this._friends.length;
       const f = this._friends[idx];
       this.emit('context-change', {
-        label: (f.displayName || f.code || '').toUpperCase().slice(0, 7),
+        label: f.label || (f.displayName || f.code || '').toUpperCase().slice(0, 7),
         value: f.tokens || 0,
         subtitle: f.lastTokenChange ? timeAgo(f.lastTokenChange) : '',
       });

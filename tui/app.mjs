@@ -268,7 +268,11 @@ export async function main(overrides = {}) {
     if (friends.length > 0) {
       content += `{bold}Friends:{/bold}\n`;
       friends.forEach((f, i) => {
-        content += `  ${i + 1}. ${f.displayName} (${f.code}) — ${f.tokens} tokens\n`;
+        let nameDisplay = f.label || f.displayName;
+        if (f.nickname) {
+          nameDisplay = `${f.nickname} (${f.displayName})`;
+        }
+        content += `  ${i + 1}. ${nameDisplay} (${f.code}) — ${f.tokens} tokens\n`;
       });
       content += '\n';
     }
@@ -316,10 +320,15 @@ export async function main(overrides = {}) {
       if (!input) { prompt.destroy(); screen.render(); return; }
 
       try {
-        await sharing.addFriend(input);
+        const result = await sharing.addFriend(input);
         parentBox.destroy();
         activeOverlay = null;
-        showRegisteredSharingOverlay();
+
+        if (result && result.needsNickname) {
+          showNicknamePrompt(result.code, result.displayName);
+        } else {
+          showRegisteredSharingOverlay();
+        }
       } catch (err) {
         prompt.destroy();
         parentBox.setContent(parentBox.getContent() + `\n{red-fg}Error: ${err.message}{/red-fg}`);
@@ -330,6 +339,55 @@ export async function main(overrides = {}) {
     prompt.on('cancel', () => {
       prompt.destroy();
       screen.render();
+    });
+  }
+
+  function showNicknamePrompt(code, conflictingName) {
+    const box = createOverlay('Nickname', 10);
+
+    const info = blessed.box({
+      parent: box,
+      top: 0,
+      left: 2,
+      right: 2,
+      height: 2,
+      content: `You already have a friend named ${conflictingName}.\nEnter a nickname for this friend:`,
+      style: { bg: 'black', fg: 'white' },
+    });
+
+    const prompt = blessed.textbox({
+      parent: box,
+      top: 3,
+      left: 2,
+      right: 2,
+      height: 3,
+      border: { type: 'line' },
+      label: ' Nickname (1-7 chars) ',
+      style: {
+        border: { fg: 'white' },
+        bg: 'black',
+        fg: 'white',
+      },
+      inputOnFocus: true,
+    });
+
+    prompt.focus();
+    screen.render();
+
+    prompt.on('submit', (value) => {
+      const nick = (value || '').trim();
+      if (nick) {
+        sharing.setNickname(code, nick);
+      }
+      box.destroy();
+      activeOverlay = null;
+      showRegisteredSharingOverlay();
+    });
+
+    prompt.on('cancel', () => {
+      box.destroy();
+      activeOverlay = null;
+      showRegisteredSharingOverlay();
     });
   }
 

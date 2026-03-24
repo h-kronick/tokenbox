@@ -18,7 +18,7 @@ export class SharingManager extends EventEmitter {
     this._pushTimer = null;
     this._fetchTimer = null;
     this._lastPushTime = 0;
-    this._friends = []; // { code, displayName, tokens, todayDate }
+    this._friends = []; // { code, displayName, nickname, tokens, todayDate }
   }
 
   start() {
@@ -30,6 +30,7 @@ export class SharingManager extends EventEmitter {
     // Load friends from settings (macOS defaults may have already populated these)
     this._friends = (this._settings.getFriends() || []).map(f => ({
       ...f,
+      nickname: f.nickname || null,
       tokens: f.tokens || 0,
       todayDate: f.todayDate || null,
     }));
@@ -112,9 +113,15 @@ export class SharingManager extends EventEmitter {
     // Fetch friend data to validate
     const friendData = await this._fetchFriend(code);
 
+    // Check for display name collision with existing friends
+    const newName = (friendData.displayName || code).toUpperCase();
+    const existingLabels = this._friends.map(f => (f.nickname || f.displayName || '').toUpperCase());
+    const hasCollision = existingLabels.includes(newName);
+
     const friend = {
       code,
       displayName: friendData.displayName || code,
+      nickname: null,
       tokens: friendData.todayTokens || 0,
       todayDate: friendData.todayDate || null,
     };
@@ -128,7 +135,16 @@ export class SharingManager extends EventEmitter {
       this._fetchTimer = setInterval(() => this._fetchAllFriends(), FETCH_INTERVAL_MS);
     }
 
-    return friend;
+    return { ...friend, needsNickname: hasCollision };
+  }
+
+  setNickname(code, nickname) {
+    const friend = this._friends.find(f => f.code === code);
+    if (!friend) return;
+    const trimmed = (nickname || '').trim();
+    friend.nickname = trimmed ? trimmed.toUpperCase().slice(0, 7) : null;
+    this._persistFriends();
+    this._notifyFriendsChanged();
   }
 
   removeFriend(code) {
@@ -154,6 +170,8 @@ export class SharingManager extends EventEmitter {
 
       return {
         ...f,
+        // label = nickname || displayName — used by display for the split-flap
+        label: (f.nickname || f.displayName || f.code || '').toUpperCase().slice(0, 7),
         // Stale check: if friend's todayDate != our today, show 0 for today
         tokens: f.todayDate === today ? tokens : 0,
       };
@@ -252,14 +270,25 @@ export class SharingManager extends EventEmitter {
         const parsed = JSON.parse(friendsRaw);
         if (Array.isArray(parsed) && parsed.length > 0) {
           // Map from Swift format — preserve token data + per-model breakdown
-          const mapped = parsed.map(f => ({
-            code: f.shareCode || f.code,
-            displayName: f.displayName || f.shareCode || f.code,
-            tokens: f.todayTokens || 0,
-            tokensByModel: f.tokensByModel || {},
-            todayDate: f.todayDate || null,
-            lastTokenChange: f.lastTokenChange || null,
-          }));
+          // Preserve any existing nicknames from local settings
+          const existingFriends = this._settings.getFriends() || [];
+          const nicknameMap = {};
+          for (const ef of existingFriends) {
+            if (ef.nickname) nicknameMap[ef.code] = ef.nickname;
+          }
+
+          const mapped = parsed.map(f => {
+            const code = f.shareCode || f.code;
+            return {
+              code,
+              displayName: f.displayName || code,
+              nickname: f.nickname || nicknameMap[code] || null,
+              tokens: f.todayTokens || 0,
+              tokensByModel: f.tokensByModel || {},
+              todayDate: f.todayDate || null,
+              lastTokenChange: f.lastTokenChange || null,
+            };
+          });
           this._settings.setFriends(mapped);
         }
       } catch {}
@@ -267,7 +296,11 @@ export class SharingManager extends EventEmitter {
   }
 
   _persistFriends() {
-    const list = this._friends.map(f => ({ code: f.code, displayName: f.displayName }));
+    const list = this._friends.map(f => ({
+      code: f.code,
+      displayName: f.displayName,
+      nickname: f.nickname || null,
+    }));
     this._settings.setFriends(list);
   }
 
