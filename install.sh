@@ -41,7 +41,7 @@ if ! command -v git &>/dev/null; then fail "git not found — install Xcode CLI 
 ok "git"
 
 if ! command -v swift &>/dev/null; then fail "swift not found — install Xcode or Xcode CLI tools"; fi
-ok "swift $(swift --version 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+' | head -1)"
+ok "swift $(swift --version 2>&1 | grep -oE 'Swift version [0-9]+\.[0-9]+' | grep -oE '[0-9]+\.[0-9]+' | head -1)"
 
 if ! command -v node &>/dev/null; then
   warn "Node.js not found — skill features will be limited (app still works)"
@@ -186,7 +186,7 @@ mkdir -p "$(dirname "$SKILL_DIR")"
 ln -sf "$REPO_DIR/skill" "$SKILL_DIR"
 
 if [ "$HAS_NODE" = true ]; then
-  (cd "$REPO_DIR/skill" && npm install --omit=dev --quiet 2>/dev/null)
+  (cd "$REPO_DIR/skill" && npm install --omit=dev --silent 2>&1 | tail -1)
   ok "Skill installed with dependencies"
 else
   ok "Skill linked (install Node.js for full functionality)"
@@ -275,15 +275,23 @@ echo -e "${AMBER}━━━━━━━━━━━━━━━━━━━━━
 echo -e "${GREEN}${BOLD}  TokenBox installed successfully!${RESET}"
 echo -e "${AMBER}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
 echo ""
-echo -e "  ${BOLD}Launch:${RESET}  tokenbox"
+echo -e "  ${BOLD}Launch:${RESET}  Type ${AMBER}tokenbox${RESET} anywhere in your terminal"
 echo -e "  ${BOLD}Usage:${RESET}   Token tracking starts automatically"
 echo -e "           as you use Claude Code."
-echo -e "  ${BOLD}Remove:${RESET}  tokenbox uninstall"
+echo -e "  ${BOLD}Update:${RESET} tokenbox update"
+echo -e "  ${BOLD}Remove:${RESET} tokenbox uninstall"
 echo ""
 
-# Launch it
-read -p "  Launch TokenBox now? [Y/n] " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-  tokenbox 2>/dev/null || "$BIN" &disown
+# Launch — auto-launch when piped from curl (no tty), prompt when run interactively
+if [ -t 0 ]; then
+  read -p "  Launch TokenBox now? [Y/n] " -n 1 -r
+  echo
+  if [[ $REPLY =~ ^[Nn]$ ]]; then
+    exit 0
+  fi
 fi
+
+echo -e "  ${DIM}Launching...${RESET}"
+"$BIN" >/dev/null 2>&1 &
+disown
+echo -e "  ${GREEN}✓${RESET} TokenBox is running in your menu bar"
