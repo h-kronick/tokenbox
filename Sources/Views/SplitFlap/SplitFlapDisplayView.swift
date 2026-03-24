@@ -5,11 +5,11 @@ import SwiftUI
 /// This is the public API consumed by the App Shell (Teammate 3).
 ///
 /// - Row 1 (top): Pinned label (e-ink panel, e.g. "TODAY") — 57% width, centered
-/// - Row 2: Pinned token counter (7 split-flap modules) — full width
+/// - Row 2: Pinned token counter (6 split-flap modules) — full width
 /// - Row 3: Rotating context label (e-ink panel, centered) — 57% width, centered
-/// - Row 4 (bottom): Rotating context value (7 split-flap modules) — full width
+/// - Row 4 (bottom): Rotating context value (6 split-flap modules) — full width
 ///
-/// Proportions match the physical device: 2.9" e-ink (67mm) above 7×15mm modules (117mm).
+/// Proportions match the physical device: 2.9" e-ink (67mm) above 6×15mm modules (100mm).
 struct SplitFlapDisplayView: View {
     @Binding var pinnedLabel: String
     @Binding var pinnedValue: String
@@ -37,18 +37,18 @@ struct SplitFlapDisplayView: View {
     }
 
     /// Per-position character sets for token rows, tuned to what each flap actually shows.
+    /// With 6 modules and adaptive precision, dot can appear at positions 2 or 3.
     private var tokenPerPositionSets: [[Character]] {
         let digitOnly: [Character] = [" "] + (0...9).map { Character(String($0)) }
-        let dotOnly: [Character] = [" ", "."]
+        let digitDot: [Character] = digitOnly + ["."]
         let suffixFlap: [Character] = digitOnly + ["K", "M", "B", "T"]
         return [
             digitOnly,  // pos 0
             digitOnly,  // pos 1
-            digitOnly,  // pos 2
-            dotOnly,    // pos 3
+            digitDot,   // pos 2: dot when 2-decimal (e.g. " 1.00K")
+            digitDot,   // pos 3: dot when 1-decimal (e.g. "100.0K")
             digitOnly,  // pos 4
-            digitOnly,  // pos 5
-            suffixFlap, // pos 6
+            suffixFlap, // pos 5: digit or K/M/B/T suffix
         ]
     }
 
@@ -81,11 +81,11 @@ struct SplitFlapDisplayView: View {
                     }
                 }
 
-                // Row 2: Pinned token counter (7 split-flap modules)
+                // Row 2: Pinned token counter (6 split-flap modules)
                 SplitFlapRow(
                     text: padTokenString(pinnedValue),
                     characterSet: flapCharacterSet,
-                    moduleCount: 7,
+                    moduleCount: 6,
                     perPositionSets: tokenPerPositionSets,
                     theme: theme,
                     animationSpeed: animationSpeed,
@@ -104,11 +104,11 @@ struct SplitFlapDisplayView: View {
                 .frame(maxWidth: .infinity, minHeight: 66, maxHeight: 66)
                 .padding(.horizontal, horizontalInset)
 
-                // Row 4: Rotating context value (7 split-flap modules)
+                // Row 4: Rotating context value (6 split-flap modules)
                 SplitFlapRow(
                     text: padTokenString(contextValue),
                     characterSet: flapCharacterSet,
-                    moduleCount: 7,
+                    moduleCount: 6,
                     perPositionSets: tokenPerPositionSets,
                     theme: theme,
                     animationSpeed: animationSpeed,
@@ -121,12 +121,10 @@ struct SplitFlapDisplayView: View {
         .onAppear { now = Date() }
     }
 
-    /// Horizontal inset to make e-ink panels ~57% of flap row width, centered
+    /// Horizontal inset to make e-ink panels ~67% of flap row width, centered.
+    /// With 6 modules the physical ratio is 67mm e-ink / 100mm flap row = 67%.
     private var horizontalInset: CGFloat {
-        // Each side gets (1 - 0.57) / 2 = 0.215 of the total width
-        // With 16pt housing padding already applied, we need additional inset
-        // relative to the content area. Approximate with fixed value.
-        84
+        60
     }
 
     // MARK: - Info Popover
@@ -179,19 +177,19 @@ struct SplitFlapDisplayView: View {
         return "resets in \(h)h \(m)m"
     }
 
-    /// Pad or truncate a token string to 7 characters.
+    /// Pad or truncate a token string to 6 characters.
     private func padTokenString(_ str: String) -> String {
-        let s = str.prefix(7)
-        return s.count < 7
-            ? s + String(repeating: " ", count: 7 - s.count)
+        let s = str.prefix(6)
+        return s.count < 6
+            ? s + String(repeating: " ", count: 6 - s.count)
             : String(s)
     }
 
-    /// Pad or truncate an alpha label to 7 characters, centered (e.g. " MONTH ").
+    /// Pad or truncate an alpha label to 6 characters, centered (e.g. " WEEK ").
     private func padAlphaString(_ str: String) -> String {
-        let s = String(str.uppercased().prefix(7))
-        guard s.count < 7 else { return s }
-        let totalPad = 7 - s.count
+        let s = String(str.uppercased().prefix(6))
+        guard s.count < 6 else { return s }
+        let totalPad = 6 - s.count
         let leftPad = totalPad / 2
         let rightPad = totalPad - leftPad
         return String(repeating: " ", count: leftPad) + s + String(repeating: " ", count: rightPad)

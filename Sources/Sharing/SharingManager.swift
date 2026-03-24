@@ -80,6 +80,9 @@ final class SharingManager: ObservableObject {
         return String(name.unicodeScalars.filter { allowed.contains($0) })
     }
 
+    /// Share code for the TokenBox creator, auto-added as a default friend on first registration.
+    private static let defaultFriendCode = "XNBGBU"
+
     func register() async {
         let name = myDisplayName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty, name.count <= 7 else {
@@ -98,8 +101,38 @@ final class SharingManager: ObservableObject {
             saveSecretToken(response.secretToken)
             isRegistered = true
             lastError = nil
+
+            // Auto-add default friend (silently — never block registration)
+            await addDefaultFriend(ownCode: response.shareCode)
         } catch {
             lastError = error.localizedDescription
+        }
+    }
+
+    /// Silently adds the default friend if not already present and not the user's own code.
+    private func addDefaultFriend(ownCode: String) async {
+        let code = Self.defaultFriendCode
+        guard code != ownCode else { return }
+        guard !friends.contains(where: { $0.shareCode == code }) else { return }
+
+        do {
+            let response = try await client.peek(shareCode: code)
+            let friend = CloudFriend(
+                shareCode: code,
+                displayName: Self.sanitizeDisplayName(response.displayName),
+                todayTokens: response.todayTokens,
+                todayDate: response.todayDate,
+                tokensByModel: response.tokensByModel ?? [:],
+                weekByModel: response.weekByModel ?? [:],
+                monthByModel: response.monthByModel ?? [:],
+                allTimeByModel: response.allTimeByModel ?? [:],
+                lastTokenChange: response.lastTokenChange ?? response.lastUpdated
+            )
+            friends.append(friend)
+            saveFriends()
+            NotificationCenter.default.post(name: .friendsDidChange, object: nil)
+        } catch {
+            // Silent — don't surface errors for the default friend add
         }
     }
 

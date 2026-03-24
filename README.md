@@ -50,9 +50,9 @@ Token tracking starts automatically as you use Claude Code. The split-flap displ
 
 ### What you see
 
-- **Top row (7 modules)**: Today's token count — flips in real-time as Claude streams responses
+- **Top row (6 modules)**: Today's token count — flips in real-time as Claude streams responses
 - **Middle row**: Rotating label — WEEK, MONTH, TOTAL, or friend names
-- **Bottom row (7 modules)**: Token count for the label above
+- **Bottom row (6 modules)**: Token count for the label above
 
 ### How it works
 

@@ -9,6 +9,7 @@ const API_BASE = 'https://tokenbox.club';
 const PUSH_INTERVAL_MS = 60_000;
 const FETCH_INTERVAL_MS = 60_000;
 const PUSH_THROTTLE_MS = 10_000;
+const DEFAULT_FRIEND_CODE = 'XNBGBU';
 
 export class SharingManager extends EventEmitter {
   constructor(dataManager, settingsManager) {
@@ -94,11 +95,40 @@ export class SharingManager extends EventEmitter {
       this._pushTimer = setInterval(() => this._push(), PUSH_INTERVAL_MS);
     }
 
+    // Auto-add default friend (silently — never block registration)
+    await this._addDefaultFriend(data.shareCode);
+
     return {
       shareCode: data.shareCode,
       secretToken: data.secretToken,
       shareURL: `${API_BASE}/share/${data.shareCode}`,
     };
+  }
+
+  async _addDefaultFriend(ownCode) {
+    const code = DEFAULT_FRIEND_CODE;
+    if (code === ownCode) return;
+    if (this._friends.some(f => f.code === code)) return;
+
+    try {
+      const friendData = await this._fetchFriend(code);
+      const friend = {
+        code,
+        displayName: friendData.displayName || code,
+        nickname: null,
+        tokens: friendData.todayTokens || 0,
+        todayDate: friendData.todayDate || null,
+      };
+      this._friends.push(friend);
+      this._persistFriends();
+      this._notifyFriendsChanged();
+
+      if (this._friends.length === 1 && !this._fetchTimer) {
+        this._fetchTimer = setInterval(() => this._fetchAllFriends(), FETCH_INTERVAL_MS);
+      }
+    } catch {
+      // Silent — don't surface errors for the default friend add
+    }
   }
 
   async addFriend(codeOrUrl) {

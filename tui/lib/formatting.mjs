@@ -1,29 +1,34 @@
 // Token display formatting — port of Swift AppState.formatTokens()
-// All outputs are exactly 7 characters, right-aligned, space-padded on left.
+// All outputs are exactly 6 characters, right-aligned, space-padded on left.
 
 /**
- * Format token count for the 7-module split-flap display.
+ * Format token count for the 6-module split-flap display.
+ * Adaptive precision: 2 decimals when it fits, 1 when it doesn't.
  * @param {number} n - Token count
- * @returns {string} Exactly 7 characters, right-aligned
+ * @returns {string} Exactly 6 characters, right-aligned
  */
 export function formatTokens(n) {
   let raw;
   if (n < 1000) {
     raw = String(Math.round(n));
-  } else if (n < 999_995) {
-    // Below 999.995K (avoids rounding to 1000.00K)
+  } else if (n < 99_995) {
     raw = (n / 1_000).toFixed(2) + 'K';
-  } else if (n < 999_995_000) {
-    // Below 999.995M (avoids rounding to 1000.00M)
+  } else if (n < 999_950) {
+    raw = (n / 1_000).toFixed(1) + 'K';
+  } else if (n < 99_995_000) {
     raw = (n / 1_000_000).toFixed(2) + 'M';
-  } else {
+  } else if (n < 999_950_000) {
+    raw = (n / 1_000_000).toFixed(1) + 'M';
+  } else if (n < 99_995_000_000) {
     raw = (n / 1_000_000_000).toFixed(2) + 'B';
+  } else {
+    raw = (n / 1_000_000_000).toFixed(1) + 'B';
   }
-  // Right-align to 7 characters
-  if (raw.length < 7) {
-    return ' '.repeat(7 - raw.length) + raw;
+  // Right-align to 6 characters
+  if (raw.length < 6) {
+    return ' '.repeat(6 - raw.length) + raw;
   }
-  return raw.slice(0, 7);
+  return raw.slice(0, 6);
 }
 
 /**
@@ -59,7 +64,7 @@ export function formatModelShort(model) {
   if (model.includes('opus')) return 'OPUS';
   if (model.includes('sonnet')) return 'SONNET';
   if (model.includes('haiku')) return 'HAIKU';
-  return model.slice(0, 7).toUpperCase();
+  return model.slice(0, 6).toUpperCase();
 }
 
 /**

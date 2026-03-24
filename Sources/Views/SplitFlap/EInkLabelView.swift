@@ -9,7 +9,7 @@ import SwiftUI
 /// on the e-ink panel itself, matching the physical device.
 ///
 /// Physical: 2.9" B/W e-ink (296×128, 67×29mm active) behind amber acrylic.
-/// The panel is narrower than the 7-module flap row below it (~57% width).
+/// The panel is narrower than the 6-module flap row below it (~57% width).
 struct EInkLabelView: View {
     let text: String
     var subtitleLeft: String? = nil
@@ -67,7 +67,7 @@ struct EInkLabelView: View {
                 // Main label text
                 Text(displayText.uppercased())
                     .font(.system(size: 33, weight: .bold, design: .monospaced))
-                    .tracking(9)
+                    .tracking(7)
                     .foregroundColor(panelText)
                     .opacity(isRefreshing ? 0 : 1)
 

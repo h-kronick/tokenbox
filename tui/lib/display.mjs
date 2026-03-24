@@ -8,14 +8,14 @@ export const THEMES = {
   'white-minimal':  { bg: '#1a1a1a', fg: '#e0e0e0', flapBg: '#2a2a2a', flapChar: '#e0e0e0', hinge: '#3a3a3a', label: '#e0e0e0', border: '#3a3a3a' },
 };
 
-const MIN_WIDTH = 44;
+const MIN_WIDTH = 38;
 
 // Each flap module: 5 chars wide, 4 lines tall
 // ┌───┐
 // │ X │
 // ├───┤
 // └───┘
-// 7 modules with 1-space gaps = 7*5 + 6*1 = 41 chars, plus 2 side padding = 43
+// 6 modules with 1-space gaps = 6*5 + 5*1 = 35 chars, plus 2 side padding = 37
 
 function renderFlapLine(chars, lineType) {
   const parts = chars.map(ch => {
@@ -39,10 +39,10 @@ export class Display {
     this._pinnedLabel = 'TODAY';
     this._pinnedLeftSubtitle = '';
     this._pinnedRightSubtitle = '';
-    this._pinnedChars = Array(7).fill(' ');
+    this._pinnedChars = Array(6).fill(' ');
     this._contextLabel = 'WEEK';
     this._contextSubtitle = '';
-    this._contextChars = Array(7).fill(' ');
+    this._contextChars = Array(6).fill(' ');
 
     // Create the main box
     this._box = blessed.box({
@@ -102,7 +102,7 @@ export class Display {
   }
 
   setPinnedValue(str) {
-    const padded = str.padStart(7).slice(0, 7);
+    const padded = str.padStart(6).slice(0, 6);
     this._pinnedChars = padded.split('');
   }
 
@@ -112,7 +112,7 @@ export class Display {
   }
 
   setContextValue(str) {
-    const padded = str.padStart(7).slice(0, 7);
+    const padded = str.padStart(6).slice(0, 6);
     this._contextChars = padded.split('');
   }
 
@@ -140,7 +140,7 @@ export class Display {
     // Row 1: Pinned e-ink label with optional left/right subtitles
     const pinnedLabel = `\u2550 ${this._pinnedLabel} \u2550`;
     if (this._pinnedLeftSubtitle || this._pinnedRightSubtitle) {
-      const flapWidth = 41; // 7*5 + 6
+      const flapWidth = 35; // 6*5 + 5
       const left = this._pinnedLeftSubtitle;
       const right = this._pinnedRightSubtitle ? `resets in ${this._pinnedRightSubtitle}` : '';
       const usedLen = left.length + pinnedLabel.length + right.length;
@@ -165,7 +165,7 @@ export class Display {
     // Row 3: Context e-ink label with optional subtitle
     const ctxLabel = `\u2550 ${this._contextLabel} \u2550`;
     if (this._contextSubtitle) {
-      const flapWidth = 41; // 7*5 + 6
+      const flapWidth = 35; // 6*5 + 5
       const labelLen = ctxLabel.length;
       const subtitleLen = this._contextSubtitle.length;
       const gap = flapWidth - labelLen - subtitleLen;

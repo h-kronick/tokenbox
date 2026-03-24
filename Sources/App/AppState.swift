@@ -14,8 +14,8 @@ enum TimePeriod: String, CaseIterable, Identifiable {
 /// Represents what the context panel (rows 2+3) is currently displaying.
 struct ContextItem: Identifiable {
     let id = UUID()
-    let label: String  // Row 2: up to 7 chars (centered by display)
-    let value: String  // Row 3: up to 6 chars (e.g. "12.3 M")
+    let label: String  // Row 2: up to 6 chars (centered by display)
+    let value: String  // Row 3: up to 6 chars (e.g. "84.70K")
     var subtitle: String? = nil  // Optional e-ink subtitle (e.g. "3m ago")
 }
 
@@ -210,40 +210,48 @@ final class AppState: ObservableObject {
 
 // MARK: - Formatting
 
-/// Format token count for the 7-module split-flap display.
-/// All outputs are exactly 7 characters: 6 for the number + 1 for suffix.
-/// Uses maximum decimal precision at each magnitude so flaps flip often.
+/// Format token count for the 6-module split-flap display.
+/// All outputs are exactly 6 characters, right-aligned, space-padded.
+/// Uses adaptive decimal precision: 2 decimals when it fits, 1 when it doesn't.
 ///
-/// Examples at key ranges:
-///   423     → "   423 "    (no suffix, right-aligned)
-///   1423    → "1.423K "    (but wait — no, let's keep it consistent)
-///   12345   → "12.35K "    (4+dot+2+K = 7? No: "12.35K" = 6 + space = 7)
-///
-/// Rule: 6 chars number portion + 1 char suffix (K/M/B or space).
+/// Examples:
+///   42      → "    42"     (raw number)
+///   999     → "   999"     (raw number)
+///   1000    → " 1.00K"     (2 decimals, fits in 6)
+///   84700   → "84.70K"     (2 decimals, exactly 6)
+///   101230  → "101.2K"     (1 decimal, 3-digit integer part)
+///   999000  → "999.0K"     (1 decimal)
+///   2145000 → " 2.15M"     (2 decimals, fits in 6)
 func formatTokens(_ count: Int) -> String {
     let raw: String
     switch count {
     case 0..<1_000:
         raw = "\(count)"
-    case 1_000..<1_000_000:
+    case 1_000..<99_995:
         raw = String(format: "%.2fK", Double(count) / 1_000.0)
-    case 1_000_000..<1_000_000_000:
+    case 99_995..<999_950:
+        raw = String(format: "%.1fK", Double(count) / 1_000.0)
+    case 999_950..<99_995_000:
         raw = String(format: "%.2fM", Double(count) / 1_000_000.0)
-    default:
+    case 99_995_000..<999_950_000:
+        raw = String(format: "%.1fM", Double(count) / 1_000_000.0)
+    case 999_950_000..<99_995_000_000:
         raw = String(format: "%.2fB", Double(count) / 1_000_000_000.0)
+    default:
+        raw = String(format: "%.1fB", Double(count) / 1_000_000_000.0)
     }
-    // Right-align to 7 characters, leading spaces for blank flaps
-    if raw.count < 7 {
-        return String(repeating: " ", count: 7 - raw.count) + raw
+    // Right-align to 6 characters, leading spaces for blank flaps
+    if raw.count < 6 {
+        return String(repeating: " ", count: 6 - raw.count) + raw
     }
-    return String(raw.prefix(7))
+    return String(raw.prefix(6))
 }
 
 func formatModelShort(_ model: String) -> String {
     if model.contains("opus") { return "OPUS" }
     if model.contains("sonnet") { return "SONNET" }
     if model.contains("haiku") { return "HAIKU" }
-    return String(model.prefix(7)).uppercased()
+    return String(model.prefix(6)).uppercased()
 }
 
 func formatCompactTokens(_ count: Int) -> String {

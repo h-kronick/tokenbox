@@ -507,7 +507,7 @@ export async function main(overrides = {}) {
 
   await new Promise(resolve => {
     const randomChars = '0123456789';
-    const randomTarget = Array(7).fill(0).map(() =>
+    const randomTarget = Array(6).fill(0).map(() =>
       randomChars[Math.floor(Math.random() * randomChars.length)]
     ).join('');
 
