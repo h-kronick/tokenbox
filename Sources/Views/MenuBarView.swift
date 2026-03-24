@@ -3,6 +3,7 @@ import SwiftUI
 /// Content view shown when clicking the menu bar icon.
 struct MenuBarView: View {
     @ObservedObject var state: MenuBarState
+    @StateObject private var appVersion = AppVersion()
     @Environment(\.openSettings) private var openSettings
     @Environment(\.dismiss) private var dismiss
     @AppStorage("theme") private var themeRawValue: String = SplitFlapTheme.classicAmber.rawValue
@@ -70,7 +71,20 @@ struct MenuBarView: View {
                 NSApplication.shared.terminate(nil)
             }
 
-            Spacer().frame(height: 4)
+            // Version footer
+            HStack(spacing: 4) {
+                Text(appVersion.localHash)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(theme.sectionLabel.opacity(0.5))
+                if appVersion.updateAvailable {
+                    Circle()
+                        .fill(Color(hex: 0xc0a030))
+                        .frame(width: 5, height: 5)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 2)
+            .padding(.bottom, 6)
         }
         .frame(width: 220)
         .background(theme.windowChrome)
@@ -81,6 +95,10 @@ struct MenuBarView: View {
                let window = delegate.mainWindow {
                 window.orderFront(nil)
             }
+        }
+        .task {
+            appVersion.load()
+            await appVersion.checkForUpdate()
         }
     }
 

@@ -27,6 +27,9 @@ struct SettingsView: View {
 
             DisplayTab()
                 .tabItem { Label("Display", systemImage: "paintpalette") }
+
+            AboutTab()
+                .tabItem { Label("About", systemImage: "info.circle") }
         }
         .frame(width: 520, height: 380)
     }
@@ -499,5 +502,107 @@ struct DisplayTab: View {
         }
         .formStyle(.grouped)
         .padding()
+    }
+}
+
+// MARK: - About Tab
+
+struct AboutTab: View {
+    @StateObject private var appVersion = AppVersion()
+    @State private var isUpdating = false
+    @State private var updateResult: String?
+
+    var body: some View {
+        Form {
+            Section("Version") {
+                HStack {
+                    Text("Build")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(appVersion.localHash)
+                        .font(.system(.body, design: .monospaced))
+                }
+                HStack {
+                    Text("Date")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(appVersion.localDate)
+                        .font(.system(.body, design: .monospaced))
+                }
+
+                if appVersion.updateAvailable, let remote = appVersion.remoteHash {
+                    HStack {
+                        Circle()
+                            .fill(Color(hex: 0xc0a030))
+                            .frame(width: 6, height: 6)
+                        Text("Update available")
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text(remote)
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundColor(.secondary)
+                    }
+
+                    Button {
+                        isUpdating = true
+                        updateResult = nil
+                        Task {
+                            let success = await appVersion.performUpdate()
+                            updateResult = success ? "Updated — restart to apply" : "Update failed — try `tokenbox update` in terminal"
+                            isUpdating = false
+                        }
+                    } label: {
+                        if isUpdating {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(maxWidth: .infinity)
+                        } else {
+                            Text("Update Now")
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.regular)
+                    .disabled(isUpdating)
+
+                    if let result = updateResult {
+                        Text(result)
+                            .font(.caption)
+                            .foregroundColor(result.contains("restart") ? .green : .red)
+                    }
+                } else if !appVersion.updateAvailable {
+                    HStack {
+                        Image(systemName: "checkmark.circle")
+                            .foregroundColor(.green)
+                            .font(.caption)
+                        Text("Up to date")
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+
+            Section {
+                HStack {
+                    Text("GitHub")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Link("h-kronick/tokenbox", destination: URL(string: "https://github.com/h-kronick/tokenbox")!)
+                        .font(.system(.body, design: .monospaced))
+                }
+                HStack {
+                    Text("Site")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Link("tokenbox.club", destination: URL(string: "https://tokenbox.club")!)
+                        .font(.system(.body, design: .monospaced))
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+        .task {
+            appVersion.load()
+            await appVersion.checkForUpdate()
+        }
     }
 }
