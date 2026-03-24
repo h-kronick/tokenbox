@@ -1,0 +1,19 @@
+{
+  "name": "tokenbox-skill",
+  "version": "1.0.0",
+  "description": "Claude Code skill for TokenBox — token usage stats aggregation",
+  "type": "module",
+  "main": "collect.mjs",
+  "scripts": {
+    "start": "node collect.mjs --summary",
+    "test": "node --test Tests/SkillTests/*.mjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "private": true
+}

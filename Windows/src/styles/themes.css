@@ -1,0 +1,80 @@
+/* TokenBox Theme System — 3 themes as CSS custom properties */
+
+/* ========== Reset & Base ========== */
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: 'SF Mono', 'Consolas', 'Courier New', monospace;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* ========== Classic Amber (Default) ========== */
+[data-theme="classic-amber"] {
+  --background: #141310;
+  --character: #c0a030;
+  --housing: #282520;
+  --hinge: #0e0d0b;
+  --flap-bg: #1a1815;
+  --eink-bg: #2d2a25;
+  --eink-text: #c0a030;
+  --eink-subtitle: rgba(192, 160, 48, 0.5);
+  --eink-border: rgba(14, 13, 11, 0.6);
+  --window-chrome: #1e1e1e;
+  --label-color: #8a8070;
+  --section-label: #a09080;
+  --housing-shadow: rgba(0, 0, 0, 0.5);
+  --housing-border: rgba(14, 13, 11, 0.4);
+  --flap-shadow: rgba(0, 0, 0, 0.3);
+  --hinge-shadow: rgba(0, 0, 0, 0.4);
+  --inner-border: rgba(14, 13, 11, 0.3);
+}
+
+/* ========== Green Phosphor ========== */
+[data-theme="green-phosphor"] {
+  --background: #0a0f0a;
+  --character: #33ff66;
+  --housing: #1a1f1a;
+  --hinge: #050805;
+  --flap-bg: #0f140f;
+  --eink-bg: #1a201a;
+  --eink-text: #2ae858;
+  --eink-subtitle: rgba(42, 232, 88, 0.5);
+  --eink-border: rgba(5, 8, 5, 0.6);
+  --window-chrome: #0d120d;
+  --label-color: #558855;
+  --section-label: #669966;
+  --housing-shadow: rgba(0, 0, 0, 0.5);
+  --housing-border: rgba(5, 8, 5, 0.4);
+  --flap-shadow: rgba(0, 0, 0, 0.3);
+  --hinge-shadow: rgba(0, 0, 0, 0.4);
+  --inner-border: rgba(5, 8, 5, 0.3);
+}
+
+/* ========== White / Minimal ========== */
+[data-theme="white-minimal"] {
+  --background: #f5f5f0;
+  --character: #1a1a1a;
+  --housing: #e8e8e3;
+  --hinge: #d0d0cb;
+  --flap-bg: #edede8;
+  --eink-bg: #e8e8e3;
+  --eink-text: #1a1a1a;
+  --eink-subtitle: rgba(26, 26, 26, 0.5);
+  --eink-border: rgba(208, 208, 203, 0.6);
+  --window-chrome: #f0f0eb;
+  --label-color: #999990;
+  --section-label: #888880;
+  --housing-shadow: rgba(0, 0, 0, 0.15);
+  --housing-border: rgba(208, 208, 203, 0.4);
+  --flap-shadow: rgba(0, 0, 0, 0.1);
+  --hinge-shadow: rgba(0, 0, 0, 0.15);
+  --inner-border: rgba(208, 208, 203, 0.3);
+}
