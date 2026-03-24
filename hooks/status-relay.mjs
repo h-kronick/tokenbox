@@ -13,7 +13,9 @@ try {
   // Platform-aware data directory
   const dataDir = process.platform === 'win32'
     ? join(process.env.APPDATA || join(homedir(), 'AppData', 'Roaming'), 'TokenBox')
-    : join(homedir(), 'Library', 'Application Support', 'TokenBox');
+    : process.platform === 'darwin'
+      ? join(homedir(), 'Library', 'Application Support', 'TokenBox')
+      : join(process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share'), 'tokenbox');
 
   // Ensure data directory exists
   mkdirSync(dataDir, { recursive: true });

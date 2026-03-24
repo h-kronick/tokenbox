@@ -15,19 +15,38 @@ ok()   { echo -e "  ${GREEN}✓${RESET} $1"; }
 skip() { echo -e "  ${DIM}— $1${RESET}"; }
 warn() { echo -e "  ${RED}!${RESET} $1"; }
 
+# ── Platform detection ─────────────────────────────────────────
+OS="$(uname -s)"
+MACOS_NATIVE=false
+if [ "$OS" = "Darwin" ]; then
+  MAC_VER=$(sw_vers -productVersion 2>/dev/null || echo "0")
+  MAJOR=$(echo "$MAC_VER" | cut -d. -f1)
+  if [ "$MAJOR" -ge 14 ] 2>/dev/null; then
+    MACOS_NATIVE=true
+  fi
+fi
+
 echo -e "${AMBER}"
 cat << 'BANNER'
-  ╔═══════════════════════════╗
-  ║     TokenBox Uninstall     ║
-  ╚═══════════════════════════╝
+  ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐
+  │ T │ │ O │ │ K │ │ E │ │ N │ │ B │ │ O │ │ X │
+  ├───┤ ├───┤ ├───┤ ├───┤ ├───┤ ├───┤ ├───┤ ├───┤
+  └───┘ └───┘ └───┘ └───┘ └───┘ └───┘ └───┘ └───┘
+               TokenBox Uninstall
 BANNER
 echo -e "${RESET}"
 
 INSTALL_DIR="$HOME/.tokenbox"
-DATA_DIR="$HOME/Library/Application Support/TokenBox"
 SKILL_DIR="$HOME/.claude/skills/tokenbox"
 SETTINGS="$HOME/.claude/settings.json"
 BIN_CMD="$HOME/.local/bin/tokenbox"
+
+# Platform-aware data directory
+case "$OS" in
+  Darwin) DATA_DIR="$HOME/Library/Application Support/TokenBox" ;;
+  Linux)  DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/tokenbox" ;;
+  *)      DATA_DIR="$HOME/.tokenbox/data" ;;
+esac
 
 KEEP_DATA=false
 for arg in "$@"; do
@@ -44,19 +63,30 @@ for arg in "$@"; do
   esac
 done
 
-# ── 1. Kill running app ──────────────────────────────────────────
+# ── 1. Kill running processes ────────────────────────────────────
 step "Stopping TokenBox"
 
-if pgrep -x "TokenBox" > /dev/null 2>&1; then
-  killall TokenBox 2>/dev/null || true
-  # Wait briefly for clean shutdown
-  sleep 1
-  # Force kill if still running
+STOPPED=false
+
+if [ "$OS" = "Darwin" ]; then
   if pgrep -x "TokenBox" > /dev/null 2>&1; then
-    killall -9 TokenBox 2>/dev/null || true
+    killall TokenBox 2>/dev/null || true
+    sleep 1
+    if pgrep -x "TokenBox" > /dev/null 2>&1; then
+      killall -9 TokenBox 2>/dev/null || true
+    fi
+    ok "Native app stopped"
+    STOPPED=true
   fi
-  ok "App stopped"
-else
+fi
+
+# Kill TUI process
+if pkill -f "node.*tui/index.mjs" 2>/dev/null; then
+  ok "TUI stopped"
+  STOPPED=true
+fi
+
+if [ "$STOPPED" = false ]; then
   skip "Not running"
 fi
 
@@ -66,30 +96,21 @@ step "Removing Claude Code hook"
 if [ -f "$SETTINGS" ]; then
   if grep -q "status-relay" "$SETTINGS" 2>/dev/null; then
     cp "$SETTINGS" "$SETTINGS.bak.$(date +%s)"
-    python3 - "$SETTINGS" << 'PYREMOVE' 2>/dev/null && ok "Status relay removed from settings.json" || warn "Could not auto-remove — edit $SETTINGS manually"
-import json, sys
-
-settings_path = sys.argv[1]
-
-with open(settings_path, 'r') as f:
-    settings = json.load(f)
-
-# Remove statusLine if it points to status-relay
-if 'statusLine' in settings:
-    cmd = settings['statusLine'].get('command', '')
-    if 'status-relay' in cmd:
-        del settings['statusLine']
-
-# Also clean up old invalid hooks.Status key if present
-if 'hooks' in settings and 'Status' in settings['hooks']:
-    del settings['hooks']['Status']
-    if not settings['hooks']:
-        del settings['hooks']
-
-with open(settings_path, 'w') as f:
-    json.dump(settings, f, indent=2)
-    f.write('\n')
-PYREMOVE
+    node -e "
+const fs = require('fs');
+const path = process.argv[1];
+try {
+  const settings = JSON.parse(fs.readFileSync(path, 'utf8'));
+  if (settings.statusLine && (settings.statusLine.command || '').includes('status-relay')) {
+    delete settings.statusLine;
+  }
+  if (settings.hooks && settings.hooks.Status) {
+    delete settings.hooks.Status;
+    if (Object.keys(settings.hooks).length === 0) delete settings.hooks;
+  }
+  fs.writeFileSync(path, JSON.stringify(settings, null, 2) + '\n');
+} catch(e) { process.exit(1); }
+" "$SETTINGS" 2>/dev/null && ok "Status relay removed from settings.json" || warn "Could not auto-remove — edit $SETTINGS manually"
   else
     skip "Hook not in settings.json"
   fi
@@ -139,16 +160,18 @@ else
   skip "No app data found"
 fi
 
-# ── 7. Remove UserDefaults ────────────────────────────────────────
-step "Removing preferences"
+# ── 7. Remove preferences (macOS only) ───────────────────────────
+if [ "$OS" = "Darwin" ]; then
+  step "Removing preferences"
 
-if [ "$KEEP_DATA" = true ]; then
-  skip "Kept (--keep-data flag)"
-elif defaults read com.tokenbox.app &>/dev/null 2>&1; then
-  defaults delete com.tokenbox.app
-  ok "Removed com.tokenbox.app defaults"
-else
-  skip "No preferences found"
+  if [ "$KEEP_DATA" = true ]; then
+    skip "Kept (--keep-data flag)"
+  elif defaults read com.tokenbox.app &>/dev/null 2>&1; then
+    defaults delete com.tokenbox.app
+    ok "Removed com.tokenbox.app defaults"
+  else
+    skip "No preferences found"
+  fi
 fi
 
 # ── Done ──────────────────────────────────────────────────────────

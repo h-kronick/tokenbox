@@ -1,0 +1,12 @@
+{
+  "name": "tokenbox-tui",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "TokenBox terminal UI — cross-platform split-flap display",
+  "main": "index.mjs",
+  "dependencies": {
+    "blessed": "^0.1.81",
+    "better-sqlite3": "^11.0.0",
+    "chokidar": "^3.6.0"
+  }
+}

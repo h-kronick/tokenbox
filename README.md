@@ -1,13 +1,12 @@
 # TokenBox
 
-A split-flap display for your Claude token usage. Native macOS app + Windows app (Tauri 2) with real-time streaming updates.
+A split-flap display for your Claude token usage. Native macOS app + cross-platform terminal UI with real-time streaming updates.
 
 ```
-╔═══════════════════════════╗
-║  ▄▄▄▄▄ ▄▄▄▄▄ ▄▄▄▄▄ ▄▄▄  ║
-║  █ 1 █ █ 7 █ █ . █ █ M █  ║
-║  ▀▀▀▀▀ ▀▀▀▀▀ ▀▀▀▀▀ ▀▀▀  ║
-╚═══════════════════════════╝
+  ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐
+  │ T │ │ O │ │ K │ │ E │ │ N │ │ B │ │ O │ │ X │
+  ├───┤ ├───┤ ├───┤ ├───┤ ├───┤ ├───┤ ├───┤ ├───┤
+  └───┘ └───┘ └───┘ └───┘ └───┘ └───┘ └───┘ └───┘
 ```
 
 ## Install
@@ -24,22 +23,24 @@ This clones the repo, builds the app, installs the Claude Code hook, links the s
 
 - macOS 14+
 - Xcode Command Line Tools (`xcode-select --install`)
-- Node.js 18+ (optional, for the Claude Code skill)
+- Node.js 18+ (required for TUI and skill)
 - `jq` (for the status hook — `brew install jq`)
 
-### Windows
+### Other Platforms (Linux, Windows, older macOS)
 
-See [`Windows/README.md`](Windows/README.md) for the Tauri 2 Windows port. Requires:
+The terminal UI works anywhere with Node.js 18+:
 
-- Windows 10+
-- Rust toolchain
-- Node.js 18+
-- WebView2 (bundled with Windows 11, installable on Windows 10)
+```bash
+tokenbox tui    # Launch terminal UI
+```
+
+No Swift or Xcode required — the TUI is pure Node.js with real-time split-flap animation.
 
 ## Usage
 
 ```bash
-tokenbox            # Launch or bring to front
+tokenbox            # Launch or bring to front (macOS native)
+tokenbox tui        # Launch terminal UI (any platform)
 tokenbox update     # Pull latest and rebuild
 tokenbox uninstall  # Remove everything
 tokenbox help       # Show all commands
@@ -49,26 +50,26 @@ Token tracking starts automatically as you use Claude Code. The split-flap displ
 
 ### What you see
 
-- **Top row (6 modules)**: Today's token count — flips in real-time as Claude streams responses
-- **Middle row (7 modules)**: Rotating label — WEEK, MONTH, TOTAL, or friend names (centered)
-- **Bottom row (6 modules)**: Token count for the label above
+- **Top row (7 modules)**: Today's token count — flips in real-time as Claude streams responses
+- **Middle row**: Rotating label — WEEK, MONTH, TOTAL, or friend names
+- **Bottom row (7 modules)**: Token count for the label above
 
 ### How it works
 
 ```
-Claude Code → Status Line → live.json → FSEvents → App → Split-Flap UI
-Claude Code → JSONL logs  → FSEvents → Parser   → SQLite → App
+Claude Code → statusLine hook → live.json → File watcher → App/TUI → Split-Flap UI
+Claude Code → JSONL logs      → File watcher → Parser    → SQLite  → App/TUI
 ```
 
-1. A **statusLine script** captures token data from every Claude Code interaction and writes to `~/Library/Application Support/TokenBox/live.json`
+1. A **statusLine script** captures token data from every Claude Code interaction and writes to a local `live.json` file
 2. A **JSONL watcher** monitors `~/.claude/projects/` for session logs and backfills historical data
-3. The app reads both sources via macOS FSEvents for sub-second latency
+3. The app reads both sources via file watchers (FSEvents on macOS, chokidar in TUI) for sub-second latency
 
 All data stays on your machine in a local SQLite database.
 
-### Menu bar icon
+### Menu bar icon (macOS)
 
-A miniature split-flap icon lives in your menu bar. The amber flaps animate when tokens are actively streaming.
+On macOS, a miniature split-flap icon lives in your menu bar. The amber flaps animate when tokens are actively streaming.
 
 ### Ask about usage in Claude Code
 
@@ -100,12 +101,13 @@ Toggle in **Preferences > General > Real-time streaming display**.
 
 Compare daily token usage with friends anywhere in the world:
 
-1. Open **Preferences > Sharing**, enter a display name (up to 7 characters), and click **Start Sharing**
-2. Copy your share link (e.g. `https://tokenbox.club/share/A3KX9F`) and send it to a friend
-3. They paste your code/link in their **Add Friend** field
-4. The bottom rows rotate through each friend's today count
+1. **macOS app:** Open Preferences > Sharing. **TUI:** Press `s` to open the sharing panel.
+2. Enter a display name (up to 7 characters) and register
+3. Copy your share link (e.g. `https://tokenbox.club/share/A3KX9F`) and send it to a friend
+4. They paste your code/link in their Add Friend field
+5. The bottom rows rotate through each friend's today count
 
-Your token count pushes to the cloud every 60 seconds with per-model breakdown. Friends' counts refresh automatically. Each person's display respects their own model filter — switch between Opus/Sonnet/Haiku in Preferences and both your count and friends' counts update. Only display name and output token counts are shared — never file paths, project names, or conversation content.
+Your token count pushes to the cloud every 60 seconds with per-model breakdown. Friends' counts refresh automatically. Each person's display respects their own model filter — switch between Opus/Sonnet/Haiku and both your count and friends' counts update. Only display name and output token counts are shared — never file paths, project names, or conversation content.
 
 ## Architecture
 
@@ -124,16 +126,13 @@ hooks/             # statusLine relay script (bash)
 cloud/             # Cloud Functions for sharing (Node.js, GCP)
 ```
 
-### Windows (Tauri 2 — Rust + HTML/CSS/JS)
+### Terminal UI (Node.js)
 ```
-Windows/
-├── src-tauri/     # Rust backend (SQLite, file watchers, sharing, tray)
-├── src/           # Frontend (CSS 3D split-flap, Web Audio, settings)
-├── hooks/         # Cross-platform status-relay hook (Node.js)
-└── installer/     # Install scripts (Node.js + PowerShell)
+tui/
+├── index.mjs      # Entry point
+├── app.mjs        # Orchestrator
+└── lib/           # Display engine, data pipeline, sharing, settings
 ```
-
-Both platforms share the same cloud backend, JSONL format, and SQLite schema. See [`WINDOWS-PORT.md`](WINDOWS-PORT.md) for the full porting specification.
 
 ## Uninstall
 
@@ -159,12 +158,10 @@ swift test                           # Run all tests
 node skill/collect.mjs --summary     # Test skill manually
 ```
 
-### Windows
+### Terminal UI
 ```bash
-cd Windows && npm install            # Install frontend deps
-cd Windows/src-tauri && cargo build  # Build Rust backend
-cd Windows && npx tauri dev          # Dev mode with hot reload
-cd Windows && npx tauri build        # Production build (.exe/.msi)
+cd tui && node index.mjs              # Launch TUI
+cd tui && node index.mjs --theme green-phosphor  # With theme
 ```
 
 ## License
