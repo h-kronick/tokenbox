@@ -49,19 +49,40 @@ case "$OS" in
 esac
 
 KEEP_DATA=false
+SKIP_CONFIRM=false
 for arg in "$@"; do
   case "$arg" in
     --keep-data) KEEP_DATA=true ;;
+    --yes|-y) SKIP_CONFIRM=true ;;
     --help|-h)
       echo "Usage: ./uninstall.sh [OPTIONS]"
       echo ""
       echo "Options:"
-      echo "  --keep-data   Keep SQLite database and app data (only remove hooks/skill/CLI)"
+      echo "  --keep-data   Keep token history, sharing credentials, and preferences"
+      echo "  --yes, -y     Skip confirmation prompt"
       echo "  --help        Show this help"
       exit 0
       ;;
   esac
 done
+
+# ── Confirmation ──────────────────────────────────────────────────
+if [ "$SKIP_CONFIRM" = false ] && [ -t 0 ]; then
+  echo -e "  This will remove TokenBox from your system."
+  echo ""
+  echo -e "  ${BOLD}[Enter]${RESET}  Uninstall and ${RED}delete all data${RESET} (token history, sharing, preferences)"
+  echo -e "  ${BOLD}[k]${RESET}      Uninstall but ${GREEN}keep your data${RESET} (reinstall later without losing anything)"
+  echo -e "  ${BOLD}[c]${RESET}      Cancel"
+  echo ""
+  read -p "  Your choice: " -n 1 -r
+  echo
+  case "$REPLY" in
+    k|K) KEEP_DATA=true ;;
+    c|C|n|N) echo -e "  ${DIM}Cancelled.${RESET}"; exit 0 ;;
+    "") ;; # Enter = proceed with full uninstall
+    *) echo -e "  ${DIM}Cancelled.${RESET}"; exit 0 ;;
+  esac
+fi
 
 # ── 1. Kill running processes ────────────────────────────────────
 step "Stopping TokenBox"
