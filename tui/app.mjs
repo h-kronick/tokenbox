@@ -4,7 +4,7 @@ import blessed from 'blessed';
 import { Display, THEMES } from './lib/display.mjs';
 import { SplitFlapRow } from './lib/animation.mjs';
 import { TOKEN_POSITION_SETS } from './lib/charsets.mjs';
-import { formatTokens } from './lib/formatting.mjs';
+import { formatTokens, formatModelName, timeUntilReset } from './lib/formatting.mjs';
 import { DataManager } from './lib/data.mjs';
 import { SharingManager } from './lib/sharing.mjs';
 import { SettingsManager } from './lib/settings.mjs';
@@ -33,12 +33,19 @@ export async function main(overrides = {}) {
     smartCSR: true,
     title: 'TokenBox',
     fullUnicode: true,
+    terminal: 'xterm-256color',
+    warnings: false,
   });
+
+  // Suppress Setulc terminfo error (blessed bug with modern terminals)
+  if (screen.tput) {
+    screen.tput.strings.Setulc = '';
+  }
 
   // Create display
   const display = new Display(screen);
   display.setTheme(s.theme);
-  display.setPinnedLabel(PERIOD_LABELS[s.pinnedPeriod] || 'TODAY');
+  display.setPinnedLabel(PERIOD_LABELS[s.pinnedPeriod] || 'TODAY', formatModelName(s.modelFilter), timeUntilReset());
 
   // Create animation rows
   const pinnedRow = new SplitFlapRow(TOKEN_POSITION_SETS);
@@ -46,8 +53,8 @@ export async function main(overrides = {}) {
 
   // --- Data events ---
 
-  data.on('pinned-change', ({ label, value }) => {
-    display.setPinnedLabel(label);
+  data.on('pinned-change', ({ label, value, modelName, resetTime }) => {
+    display.setPinnedLabel(label, modelName || formatModelName(s.modelFilter), resetTime || timeUntilReset());
     const formatted = formatTokens(value);
     pinnedRow.setTarget(formatted);
     pinnedRow.startAnimation((pos, ch) => display.renderFlap(0, pos, ch), s.animationSpeed);
@@ -415,18 +422,46 @@ export async function main(overrides = {}) {
     renderPrefs();
   }
 
+  // 60-second timer to update "resets in" time on pinned label
+  const resetTimer = setInterval(() => {
+    display.setPinnedLabel(
+      PERIOD_LABELS[s.pinnedPeriod] || 'TODAY',
+      formatModelName(s.modelFilter),
+      timeUntilReset()
+    );
+    display.render();
+  }, 60_000);
+
   function shutdown() {
+    clearInterval(resetTimer);
     data.stop();
     sharing.stop();
     pinnedRow.stopAnimation();
     contextRow.stopAnimation();
-    screen.destroy();
+    try { screen.destroy(); } catch {}
     process.exit(0);
   }
 
   // --- Start everything ---
 
+  // Startup cascade — simulate display warming up
+  display.render();
+
+  await new Promise(resolve => {
+    const randomChars = '0123456789';
+    const randomTarget = Array(7).fill(0).map(() =>
+      randomChars[Math.floor(Math.random() * randomChars.length)]
+    ).join('');
+
+    pinnedRow.setTarget(randomTarget);
+    contextRow.setTarget(randomTarget);
+
+    pinnedRow.startAnimation((pos, ch) => display.renderFlap(0, pos, ch), s.animationSpeed);
+    contextRow.startAnimation((pos, ch) => display.renderFlap(1, pos, ch), s.animationSpeed);
+
+    setTimeout(() => resolve(), 800);
+  });
+
   data.start(s.modelFilter, s.pinnedPeriod);
   sharing.start();
-  display.render();
 }

@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
 import chokidar from 'chokidar';
 import { getDb, closeDb } from '../../skill/lib/db.mjs';
-import { formatTokens } from './formatting.mjs';
+import { formatTokens, formatModelName, timeUntilReset, timeAgo } from './formatting.mjs';
 
 const CONTEXT_ROTATION_MS = 15_000;
 
@@ -82,6 +82,8 @@ export class DataManager extends EventEmitter {
     this.emit('pinned-change', {
       label: PERIOD_LABELS[p],
       value: this._tokens[p] + (p === 'today' ? this._realtimeDelta : 0),
+      modelName: formatModelName(this._modelFilter),
+      resetTime: timeUntilReset(),
     });
     this._emitContextChange();
   }
@@ -90,7 +92,12 @@ export class DataManager extends EventEmitter {
     this._realtimeDelta += n;
     // Update all periods with the delta
     const val = this._tokens[this._pinnedPeriod] + (this._pinnedPeriod === 'today' ? this._realtimeDelta : 0);
-    this.emit('pinned-change', { label: PERIOD_LABELS[this._pinnedPeriod], value: val });
+    this.emit('pinned-change', {
+      label: PERIOD_LABELS[this._pinnedPeriod],
+      value: val,
+      modelName: formatModelName(this._modelFilter),
+      resetTime: timeUntilReset(),
+    });
   }
 
   setFriends(friends) {
@@ -153,7 +160,12 @@ export class DataManager extends EventEmitter {
 
     // Emit current pinned value
     const pinnedVal = this._tokens[this._pinnedPeriod] + (this._pinnedPeriod === 'today' ? this._realtimeDelta : 0);
-    this.emit('pinned-change', { label: PERIOD_LABELS[this._pinnedPeriod], value: pinnedVal });
+    this.emit('pinned-change', {
+      label: PERIOD_LABELS[this._pinnedPeriod],
+      value: pinnedVal,
+      modelName: formatModelName(this._modelFilter),
+      resetTime: timeUntilReset(),
+    });
     this._emitContextChange();
   }
 
@@ -165,8 +177,8 @@ export class DataManager extends EventEmitter {
       const params = [from, to];
 
       if (modelFilter) {
-        sql += ` AND model LIKE ?`;
-        params.push(`%${modelFilter}%`);
+        sql += ` AND lower(model) LIKE '%' || lower(?) || '%'`;
+        params.push(modelFilter);
       }
 
       const row = this._db.prepare(sql).get(...params);
@@ -191,7 +203,7 @@ export class DataManager extends EventEmitter {
       this.emit('context-change', {
         label: (f.displayName || f.code || '').toUpperCase().slice(0, 7),
         value: f.tokens || 0,
-        subtitle: 'friend',
+        subtitle: f.lastTokenChange ? timeAgo(f.lastTokenChange) : '',
       });
       return;
     }

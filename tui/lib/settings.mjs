@@ -1,6 +1,7 @@
 // Settings manager — persists preferences and friends list to JSON files.
 
 import { EventEmitter } from 'node:events';
+import { execSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -68,6 +69,22 @@ export class SettingsManager extends EventEmitter {
     } catch {
       this._friends = [];
     }
+
+    // On macOS, overlay with UserDefaults from the native app
+    if (process.platform === 'darwin') {
+      this._loadMacDefaults();
+    }
+  }
+
+  _loadMacDefaults() {
+    const macModelFilter = _readMacDefault('modelFilter');
+    if (macModelFilter) this._settings.modelFilter = macModelFilter;
+
+    const macPinned = _readMacDefault('pinnedDisplay') || _readMacDefault('pinnedPeriod');
+    if (macPinned) this._settings.pinnedPeriod = macPinned;
+
+    const macTheme = _readMacDefault('theme');
+    if (macTheme) this._settings.theme = macTheme;
   }
 
   _save() {
@@ -87,4 +104,10 @@ export class SettingsManager extends EventEmitter {
       // Silent
     }
   }
+}
+
+function _readMacDefault(key) {
+  try {
+    return execSync(`defaults read com.tokenbox.app ${key}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+  } catch { return null; }
 }

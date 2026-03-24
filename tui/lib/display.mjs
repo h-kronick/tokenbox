@@ -37,6 +37,8 @@ export class Display {
 
     // State
     this._pinnedLabel = 'TODAY';
+    this._pinnedLeftSubtitle = '';
+    this._pinnedRightSubtitle = '';
     this._pinnedChars = Array(7).fill(' ');
     this._contextLabel = 'WEEK';
     this._contextSubtitle = '';
@@ -73,11 +75,7 @@ export class Display {
       tags: true,
     });
 
-    // Handle Ctrl+C for clean exit
-    screen.key(['C-c'], () => {
-      screen.destroy();
-      process.exit(0);
-    });
+    // Note: Ctrl+C / quit handled in app.mjs shutdown()
   }
 
   getScreen() {
@@ -97,8 +95,10 @@ export class Display {
     this.render();
   }
 
-  setPinnedLabel(str) {
+  setPinnedLabel(str, leftSubtitle, rightSubtitle) {
     this._pinnedLabel = str.toUpperCase();
+    this._pinnedLeftSubtitle = leftSubtitle || '';
+    this._pinnedRightSubtitle = rightSubtitle || '';
   }
 
   setPinnedValue(str) {
@@ -137,9 +137,20 @@ export class Display {
     const t = this._theme;
     const lines = [];
 
-    // Row 1: Pinned e-ink label
+    // Row 1: Pinned e-ink label with optional left/right subtitles
     const pinnedLabel = `\u2550 ${this._pinnedLabel} \u2550`;
-    lines.push(`{center}${pinnedLabel}{/center}`);
+    if (this._pinnedLeftSubtitle || this._pinnedRightSubtitle) {
+      const flapWidth = 41; // 7*5 + 6
+      const left = this._pinnedLeftSubtitle;
+      const right = this._pinnedRightSubtitle ? `resets in ${this._pinnedRightSubtitle}` : '';
+      const usedLen = left.length + pinnedLabel.length + right.length;
+      const totalGap = flapWidth - usedLen;
+      const leftGap = Math.max(1, Math.floor(totalGap / 2));
+      const rightGap = Math.max(1, totalGap - leftGap);
+      lines.push(`  ${left}${' '.repeat(leftGap)}${pinnedLabel}${' '.repeat(rightGap)}${right}`);
+    } else {
+      lines.push(`{center}${pinnedLabel}{/center}`);
+    }
 
     // Row 2: Pinned flap row (top/char/hinge/bottom)
     const pTop    = renderFlapLine(this._pinnedChars, 'top');

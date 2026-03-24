@@ -2,6 +2,7 @@
 // Uses Node 18+ built-in fetch. State stored in SQLite config table.
 
 import { EventEmitter } from 'node:events';
+import { execSync } from 'node:child_process';
 import { getDb, getConfig, setConfig } from '../../skill/lib/db.mjs';
 
 const API_BASE = 'https://tokenbox.club';
@@ -21,11 +22,16 @@ export class SharingManager extends EventEmitter {
   }
 
   start() {
-    // Load friends from settings
+    // On macOS, seed sharing state from UserDefaults (shared with native app)
+    if (process.platform === 'darwin') {
+      this._loadMacDefaults();
+    }
+
+    // Load friends from settings (macOS defaults may have already populated these)
     this._friends = (this._settings.getFriends() || []).map(f => ({
       ...f,
-      tokens: 0,
-      todayDate: null,
+      tokens: f.tokens || 0,
+      todayDate: f.todayDate || null,
     }));
 
     // Start push timer if registered
@@ -211,6 +217,39 @@ export class SharingManager extends EventEmitter {
     }
   }
 
+  _loadMacDefaults() {
+    const shareCode = _readMacDefault('myShareCode');
+    const secretToken = _readMacDefault('sharingSecretToken');
+    const displayName = _readMacDefault('myDisplayName');
+
+    // Seed SQLite config from UserDefaults if not already set
+    if (shareCode && !this.getShareCode()) {
+      try { setConfig('shareCode', shareCode); } catch {}
+    }
+    if (secretToken && !this._getSecretToken()) {
+      try { setConfig('secretToken', secretToken); } catch {}
+    }
+    if (displayName) {
+      try { setConfig('displayName', displayName); } catch {}
+    }
+
+    // Read friends from UserDefaults
+    const friendsRaw = _readMacDefault('friendsJSON');
+    if (friendsRaw) {
+      try {
+        const parsed = JSON.parse(friendsRaw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Map from Swift format {shareCode, displayName, ...} to our format {code, displayName}
+          const mapped = parsed.map(f => ({
+            code: f.shareCode || f.code,
+            displayName: f.displayName || f.shareCode || f.code,
+          }));
+          this._settings.setFriends(mapped);
+        }
+      } catch {}
+    }
+  }
+
   _persistFriends() {
     const list = this._friends.map(f => ({ code: f.code, displayName: f.displayName }));
     this._settings.setFriends(list);
@@ -221,6 +260,12 @@ export class SharingManager extends EventEmitter {
     this._data.setFriends(friends);
     this.emit('friends-changed', friends);
   }
+}
+
+function _readMacDefault(key) {
+  try {
+    return execSync(`defaults read com.tokenbox.app ${key}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+  } catch { return null; }
 }
 
 function _localTodayStr() {
