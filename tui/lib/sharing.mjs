@@ -142,13 +142,22 @@ export class SharingManager extends EventEmitter {
     }
   }
 
-  getFriends() {
+  getFriends(modelFilter) {
     const today = _localTodayStr();
-    return this._friends.map(f => ({
-      ...f,
-      // Stale check: if friend's todayDate != our today, show 0 for today
-      tokens: f.todayDate === today ? (f.tokens || 0) : 0,
-    }));
+    return this._friends.map(f => {
+      let tokens = f.tokens || 0;
+
+      // Apply model filter using per-model breakdown (matches macOS app behavior)
+      if (modelFilter && modelFilter !== 'all' && f.tokensByModel) {
+        tokens = f.tokensByModel[modelFilter] || 0;
+      }
+
+      return {
+        ...f,
+        // Stale check: if friend's todayDate != our today, show 0 for today
+        tokens: f.todayDate === today ? tokens : 0,
+      };
+    });
   }
 
   async _push() {
@@ -204,6 +213,7 @@ export class SharingManager extends EventEmitter {
         const newTokens = data.todayDate === today ? (data.todayTokens || 0) : 0;
         if (friend.tokens !== newTokens || friend.displayName !== data.displayName) {
           friend.tokens = data.todayTokens || 0;
+          friend.tokensByModel = data.tokensByModel || {};
           friend.todayDate = data.todayDate || null;
           friend.displayName = data.displayName || friend.code;
           friend.lastTokenChange = data.lastTokenChange || data.lastUpdated || null;
@@ -241,11 +251,12 @@ export class SharingManager extends EventEmitter {
       try {
         const parsed = JSON.parse(friendsRaw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Map from Swift format — preserve token data so friends show immediately
+          // Map from Swift format — preserve token data + per-model breakdown
           const mapped = parsed.map(f => ({
             code: f.shareCode || f.code,
             displayName: f.displayName || f.shareCode || f.code,
             tokens: f.todayTokens || 0,
+            tokensByModel: f.tokensByModel || {},
             todayDate: f.todayDate || null,
             lastTokenChange: f.lastTokenChange || null,
           }));
@@ -261,7 +272,9 @@ export class SharingManager extends EventEmitter {
   }
 
   _notifyFriendsChanged() {
-    const friends = this.getFriends();
+    // Get model filter from settings to apply per-model friend token filtering
+    const modelFilter = this._settings.get('modelFilter') || 'opus';
+    const friends = this.getFriends(modelFilter);
     this._data.setFriends(friends);
     this.emit('friends-changed', friends);
   }
