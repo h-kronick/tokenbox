@@ -444,8 +444,8 @@ final class SharingManager: ObservableObject {
 
     /// Cross-reference leaderboard entries with friends to keep token values in sync.
     /// If a friend's display name matches a leaderboard username, update the friend's
-    /// today tokens to match the leaderboard value. This ensures the context row and
-    /// leaderboard panel always show the same number for the same user.
+    /// per-model token breakdown to match the leaderboard value. This ensures the
+    /// context row and leaderboard panel always show the same number for the same user.
     private func syncFriendsFromLeaderboard() {
         guard !leaderboardEntries.isEmpty, !friends.isEmpty else { return }
 
@@ -455,17 +455,33 @@ final class SharingManager: ObservableObject {
             lbLookup[entry.username.lowercased()] = entry.tokens
         }
 
+        let model = leaderboardModel.lowercased()
         var changed = false
         for i in friends.indices {
             let friendName = friends[i].displayName.lowercased()
             if let lbTokens = lbLookup[friendName] {
-                // Update the friend's today model breakdown with the leaderboard value.
-                // The leaderboard fetches the model-specific value (e.g. opus tokens),
-                // so this keeps the friend display in sync for the current model filter.
-                let currentTokens = friends[i].tokens(for: nil, period: "today")
-                if currentTokens != lbTokens {
+                // Find the matching key in tokensByModel (e.g. "claude-opus-4-6" contains "opus")
+                // and update it to match the leaderboard value.
+                let matchingKey = friends[i].tokensByModel.keys.first {
+                    $0.lowercased().contains(model)
+                }
+                if let key = matchingKey {
+                    if friends[i].tokensByModel[key] != lbTokens {
+                        friends[i].tokensByModel[key] = lbTokens
+                        friends[i].todayTokens = lbTokens
+                        changed = true
+                    }
+                } else if !friends[i].tokensByModel.isEmpty {
+                    // No matching key yet — add one using the model name directly
+                    friends[i].tokensByModel[model] = lbTokens
                     friends[i].todayTokens = lbTokens
                     changed = true
+                } else {
+                    // Legacy friend with no tokensByModel — update todayTokens
+                    if friends[i].todayTokens != lbTokens {
+                        friends[i].todayTokens = lbTokens
+                        changed = true
+                    }
                 }
             }
         }

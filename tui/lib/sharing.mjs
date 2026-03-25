@@ -381,6 +381,51 @@ export class SharingManager extends EventEmitter {
       }
     }
 
+    // Sync friend tokens with leaderboard values for consistency
+    if (this.isLeaderboardOptIn() && this._friends.length > 0) {
+      try {
+        const model = this._settings.get('modelFilter') || 'opus';
+        const lb = await this.getLeaderboard(today, model, 50);
+        if (lb && lb.entries && lb.entries.length > 0) {
+          const lbLookup = {};
+          for (const entry of lb.entries) {
+            lbLookup[entry.username.toLowerCase()] = entry.tokens;
+          }
+          for (const friend of this._friends) {
+            const name = (friend.displayName || '').toLowerCase();
+            if (name in lbLookup) {
+              const lbTokens = lbLookup[name];
+              const modelMap = friend.tokensByModel || {};
+              // Find matching key (e.g. "claude-opus-4-6" contains "opus")
+              const matchingKey = Object.keys(modelMap).find(k =>
+                k.toLowerCase().includes(model.toLowerCase())
+              );
+              if (matchingKey) {
+                if (modelMap[matchingKey] !== lbTokens) {
+                  modelMap[matchingKey] = lbTokens;
+                  friend.tokensByModel = modelMap;
+                  friend.tokens = lbTokens;
+                  changed = true;
+                }
+              } else if (Object.keys(modelMap).length > 0) {
+                modelMap[model] = lbTokens;
+                friend.tokensByModel = modelMap;
+                friend.tokens = lbTokens;
+                changed = true;
+              } else {
+                if (friend.tokens !== lbTokens) {
+                  friend.tokens = lbTokens;
+                  changed = true;
+                }
+              }
+            }
+          }
+        }
+      } catch {
+        // Leaderboard sync is best-effort
+      }
+    }
+
     if (changed) {
       this._notifyFriendsChanged();
     }
