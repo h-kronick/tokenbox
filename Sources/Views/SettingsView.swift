@@ -592,6 +592,7 @@ struct LeaderboardSettingsSection: View {
                                 leaderboardEmailInput = ""
                             } else if let error = sharingManager.lastError {
                                 leaderboardError = error
+                                sharingManager.lastError = nil
                             }
                         }
                     }
@@ -616,6 +617,7 @@ struct LeaderboardSettingsSection: View {
                 isEditingLeaderboardUsername = false
             } else {
                 leaderboardError = sharingManager.lastError ?? ""
+                sharingManager.lastError = nil
             }
         }
     }
