@@ -1,7 +1,7 @@
 // Settings manager — persists preferences and friends list to JSON files.
 
 import { EventEmitter } from 'node:events';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -108,6 +108,6 @@ export class SettingsManager extends EventEmitter {
 
 function _readMacDefault(key) {
   try {
-    return execSync(`defaults read TokenBox ${key}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+    return execFileSync('/usr/bin/defaults', ['read', 'TokenBox', key], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
   } catch { return null; }
 }

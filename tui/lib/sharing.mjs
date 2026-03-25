@@ -2,7 +2,7 @@
 // Uses Node 18+ built-in fetch. State stored in SQLite config table.
 
 import { EventEmitter } from 'node:events';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { getDb, getConfig, setConfig } from '../../skill/lib/db.mjs';
 import { currentPSTDate } from './formatting.mjs';
 
@@ -471,7 +471,7 @@ export class SharingManager extends EventEmitter {
 
 function _readMacDefault(key) {
   try {
-    return execSync(`defaults read TokenBox ${key}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+    return execFileSync('/usr/bin/defaults', ['read', 'TokenBox', key], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
   } catch { return null; }
 }
 
