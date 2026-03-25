@@ -487,11 +487,59 @@ export async function main(overrides = {}) {
 
   // --- Leaderboard overlay ---
 
+  // Persistent leaderboard rank — fetch periodically when opted in
+  let leaderboardRankTimer = null;
+
+  async function refreshLeaderboardRank() {
+    if (!sharing.isLeaderboardOptIn()) return;
+    const myUsername = sharing.getLeaderboardUsername();
+    if (!myUsername) return;
+
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const model = s.modelFilter === 'all' ? 'opus' : s.modelFilter;
+      const data = await sharing.getLeaderboard(today, model, 50);
+      if (data && data.entries) {
+        const me = data.entries.find(e => e.username && e.username.toLowerCase() === myUsername.toLowerCase());
+        if (me) {
+          display.setLeaderboardRank(me.rank, myUsername);
+        } else {
+          display.setLeaderboardRank(null);
+        }
+      }
+    } catch {
+      // Silent — don't clear rank on network error
+    }
+    display.render();
+  }
+
+  function startLeaderboardRankPolling() {
+    if (leaderboardRankTimer) clearInterval(leaderboardRankTimer);
+    if (sharing.isLeaderboardOptIn()) {
+      refreshLeaderboardRank();
+      leaderboardRankTimer = setInterval(refreshLeaderboardRank, 120_000);
+    }
+  }
+
+  function formatCompactNum(n) {
+    if (n < 1000) return String(n);
+    if (n < 1_000_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
+    if (n < 1_000_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+    return (n / 1_000_000_000).toFixed(1).replace(/\.0$/, '') + 'B';
+  }
+
+  function formatCommaNum(n) {
+    return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+
   function showLeaderboardOverlay() {
     // Guard: must be registered for sharing
     if (!sharing.isRegistered()) {
-      const box = createOverlay('Leaderboard', 5);
-      box.setContent('  Register for sharing first (press s)');
+      const box = createOverlay('Leaderboard', 7);
+      box.setContent(
+        '\n  {yellow-fg}Not registered for sharing.{/yellow-fg}\n\n' +
+        '  Press {bold}s{/bold} to register first.'
+      );
       box.focus();
       screen.render();
       setTimeout(() => {
@@ -500,26 +548,26 @@ export async function main(overrides = {}) {
           activeOverlay = null;
           screen.render();
         }
-      }, 2000);
+      }, 2500);
       return;
     }
 
     if (sharing.isLeaderboardOptIn()) {
       showLeaderboardView();
     } else {
-      showLeaderboardOptIn();
+      showLeaderboardOptInStep1();
     }
   }
 
-  function showLeaderboardOptIn() {
-    // Step 1: Info screen
-    const box = createOverlay('Leaderboard', 11);
+  function showLeaderboardOptInStep1() {
+    const box = createOverlay('Join Leaderboard', 13);
     box.setContent(
-      '\n  Join the public daily leaderboard.\n' +
-      '  Only your username and daily output\n' +
-      '  token count are visible. All other\n' +
-      '  Claude data stays private.\n\n' +
-      '  {bold}[Enter]{/bold} Enable  {bold}[Esc]{/bold} Cancel'
+      '\n  {yellow-fg}Step 1 of 3{/yellow-fg}\n\n' +
+      '  Join the public daily leaderboard.\n' +
+      '  Only your {bold}username{/bold} and {bold}daily output\n' +
+      '  token count{/bold} are visible.\n\n' +
+      '  All other Claude data stays private.\n\n' +
+      '  {bold}[Enter]{/bold} Continue    {bold}[Esc]{/bold} Cancel'
     );
     box.focus();
     screen.render();
@@ -527,33 +575,34 @@ export async function main(overrides = {}) {
     box.key(['enter'], () => {
       box.destroy();
       activeOverlay = null;
-      showLeaderboardUsernameStep();
+      showLeaderboardOptInStep2();
     });
   }
 
-  function showLeaderboardUsernameStep() {
-    const box = createOverlay('Claim Username', 10);
+  function showLeaderboardOptInStep2() {
+    const box = createOverlay('Choose Username', 12);
 
-    const info = blessed.box({
+    const header = blessed.box({
       parent: box,
       top: 0,
       left: 2,
       right: 2,
-      height: 2,
-      content: '  3-15 chars, letters/numbers/_',
+      height: 3,
+      content: '  {yellow-fg}Step 2 of 3{/yellow-fg}\n\n  Choose a public username:',
       style: { bg: 'black', fg: 'white' },
+      tags: true,
     });
 
     const prompt = blessed.textbox({
       parent: box,
-      top: 2,
+      top: 4,
       left: 2,
       right: 2,
       height: 3,
       border: { type: 'line' },
-      label: ' Username ',
+      label: ' Username (3-15 chars, a-z 0-9 _) ',
       style: {
-        border: { fg: 'white' },
+        border: { fg: 'yellow' },
         bg: 'black',
         fg: 'white',
       },
@@ -562,12 +611,13 @@ export async function main(overrides = {}) {
 
     const status = blessed.box({
       parent: box,
-      top: 6,
+      top: 8,
       left: 2,
       right: 2,
       height: 1,
       content: '',
-      style: { bg: 'black', fg: 'yellow' },
+      style: { bg: 'black', fg: 'red' },
+      tags: true,
     });
 
     prompt.focus();
@@ -575,21 +625,27 @@ export async function main(overrides = {}) {
 
     prompt.on('submit', (value) => {
       const username = (value || '').trim();
-      if (!username || username.length < 3 || username.length > 15) {
-        status.setContent('  Username must be 3-15 characters');
+      if (!username || username.length < 3) {
+        status.setContent('  {red-fg}Too short — minimum 3 characters{/red-fg}');
+        screen.render();
+        prompt.focus();
+        return;
+      }
+      if (username.length > 15) {
+        status.setContent('  {red-fg}Too long — maximum 15 characters{/red-fg}');
         screen.render();
         prompt.focus();
         return;
       }
       if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-        status.setContent('  Letters, numbers, and _ only');
+        status.setContent('  {red-fg}Letters, numbers, and underscore only{/red-fg}');
         screen.render();
         prompt.focus();
         return;
       }
       box.destroy();
       activeOverlay = null;
-      showLeaderboardEmailStep(username);
+      showLeaderboardOptInStep3(username);
     });
 
     prompt.on('cancel', () => {
@@ -599,29 +655,30 @@ export async function main(overrides = {}) {
     });
   }
 
-  function showLeaderboardEmailStep(username) {
-    const box = createOverlay('Email', 10);
+  function showLeaderboardOptInStep3(username) {
+    const box = createOverlay('Email Address', 12);
 
-    const info = blessed.box({
+    const header = blessed.box({
       parent: box,
       top: 0,
       left: 2,
       right: 2,
-      height: 2,
-      content: '  Private — never displayed publicly',
+      height: 3,
+      content: '  {yellow-fg}Step 3 of 3{/yellow-fg}\n\n  Your email (private, never displayed):',
       style: { bg: 'black', fg: 'white' },
+      tags: true,
     });
 
     const prompt = blessed.textbox({
       parent: box,
-      top: 2,
+      top: 4,
       left: 2,
       right: 2,
       height: 3,
       border: { type: 'line' },
       label: ' Email ',
       style: {
-        border: { fg: 'white' },
+        border: { fg: 'yellow' },
         bg: 'black',
         fg: 'white',
       },
@@ -630,12 +687,13 @@ export async function main(overrides = {}) {
 
     const status = blessed.box({
       parent: box,
-      top: 6,
+      top: 8,
       left: 2,
       right: 2,
       height: 1,
       content: '',
       style: { bg: 'black', fg: 'yellow' },
+      tags: true,
     });
 
     prompt.focus();
@@ -644,13 +702,13 @@ export async function main(overrides = {}) {
     prompt.on('submit', async (value) => {
       const email = (value || '').trim();
       if (!email || !/.+@.+\..+/.test(email)) {
-        status.setContent('  Enter a valid email address');
+        status.setContent('  {red-fg}Enter a valid email address{/red-fg}');
         screen.render();
         prompt.focus();
         return;
       }
 
-      status.setContent('  Joining...');
+      status.setContent('  {yellow-fg}Joining leaderboard...{/yellow-fg}');
       screen.render();
 
       try {
@@ -659,7 +717,7 @@ export async function main(overrides = {}) {
         activeOverlay = null;
         showLeaderboardSuccess(username);
       } catch (err) {
-        status.setContent(`  Error: ${err.message}`);
+        status.setContent(`  {red-fg}${err.message}{/red-fg}`);
         screen.render();
         prompt.focus();
       }
@@ -673,15 +731,18 @@ export async function main(overrides = {}) {
   }
 
   function showLeaderboardSuccess(username) {
-    const box = createOverlay('Leaderboard', 9);
+    const box = createOverlay('Leaderboard', 10);
     box.setContent(
-      `\n  {green-fg}✓{/green-fg} You're on the board!\n` +
-      `    @${username}\n` +
-      `    Opted In {green-fg}✓{/green-fg}\n\n` +
-      `  Press {bold}Enter{/bold} to view leaderboard`
+      '\n  {green-fg}\u2714{/green-fg} {bold}You\'re on the board!{/bold}\n\n' +
+      `  Username:  {bold}@${username}{/bold}\n` +
+      `  Status:    {green-fg}Active{/green-fg}\n\n` +
+      '  {bold}[Enter]{/bold} View leaderboard    {bold}[Esc]{/bold} Close'
     );
     box.focus();
     screen.render();
+
+    // Start rank polling now that we're opted in
+    startLeaderboardRankPolling();
 
     box.key(['enter'], () => {
       box.destroy();
@@ -692,45 +753,84 @@ export async function main(overrides = {}) {
 
   function showLeaderboardView() {
     const MODELS = ['opus', 'sonnet', 'haiku'];
-    let currentModel = 0;
+    let currentModel = MODELS.indexOf(s.modelFilter !== 'all' ? s.modelFilter : 'opus');
+    if (currentModel < 0) currentModel = 0;
     let currentDate = new Date().toISOString().slice(0, 10);
     let leaderboardData = null;
     let loading = true;
     let errorMsg = null;
+    const myUsername = sharing.getLeaderboardUsername();
 
     const box = createOverlay('Leaderboard', '80%');
     box.focus();
 
     function renderBoard() {
-      const modelTabs = MODELS.map((m, i) =>
-        i === currentModel ? `{bold}{underline}${m.charAt(0).toUpperCase() + m.slice(1)}{/underline}{/bold}` : m.charAt(0).toUpperCase() + m.slice(1)
-      ).join(' │ ');
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const isToday = currentDate === todayStr;
+      const liveTag = isToday ? '  {green-fg}[live]{/green-fg}' : '';
 
-      let content = `  ${modelTabs}     ${currentDate}\n\n`;
+      // Model tabs with box-drawing separators
+      const modelTabs = MODELS.map((m, i) => {
+        const label = m.charAt(0).toUpperCase() + m.slice(1);
+        return i === currentModel
+          ? `{yellow-fg}{bold}${label}{/bold}{/yellow-fg}`
+          : `{white-fg}${label}{/white-fg}`;
+      }).join(' {white-fg}\u2502{/white-fg} ');
+
+      // Date display
+      const dateLabel = isToday ? 'Today' : currentDate;
+
+      let content = '';
+      content += `  ${modelTabs}${liveTag}\n`;
+      content += `  {white-fg}${dateLabel}{/white-fg}\n`;
+      content += '  {white-fg}\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500{/white-fg}\n';
 
       if (loading) {
-        content += '  Loading...';
+        content += '\n  {yellow-fg}\u25cf{/yellow-fg} Loading...\n';
       } else if (errorMsg) {
-        content += `  {red-fg}${errorMsg}{/red-fg}`;
+        content += `\n  {red-fg}\u2716 ${errorMsg}{/red-fg}\n`;
       } else if (!leaderboardData || !leaderboardData.entries || leaderboardData.entries.length === 0) {
-        content += '  No entries for this day.';
+        content += '\n  {yellow-fg}No entries yet \u2014 be the first!{/yellow-fg}\n';
       } else {
-        const myUsername = sharing.getLeaderboardUsername();
-        for (const entry of leaderboardData.entries) {
-          const rank = String(entry.rank).padStart(3);
-          const name = entry.username.padEnd(18);
-          const tokens = String(entry.tokens).replace(/\B(?=(\d{3})+(?!\d))/g, ',').padStart(10);
-          const isMe = myUsername && entry.username.toLowerCase() === myUsername.toLowerCase();
-          const suffix = isMe ? ' ← you' : '';
-          const badge = entry.optedIn ? '{green-fg}✓{/green-fg}' : ' ';
-          content += `  ${rank}. ${name} ${tokens}  ${badge}${suffix}\n`;
+        const entries = leaderboardData.entries;
+        const myIdx = myUsername ? entries.findIndex(e => e.username && e.username.toLowerCase() === myUsername.toLowerCase()) : -1;
+
+        // Show top entries, then separator + own entry if not in top
+        const topCount = Math.min(entries.length, 20);
+        let shownMyEntry = false;
+
+        for (let i = 0; i < topCount; i++) {
+          const entry = entries[i];
+          const isMe = myUsername && entry.username && entry.username.toLowerCase() === myUsername.toLowerCase();
+          if (isMe) shownMyEntry = true;
+          content += formatLeaderboardEntry(entry, isMe);
+        }
+
+        // If user is not in the visible top, show separator + their entry
+        if (myIdx >= topCount && !shownMyEntry) {
+          content += '  {white-fg}\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500{/white-fg}\n';
+          content += formatLeaderboardEntry(entries[myIdx], true);
         }
       }
 
-      content += '\n  {bold}[←/→]{/bold} Day  {bold}[m]{/bold} Model  {bold}[Esc]{/bold} Close';
+      content += '\n  {bold}[\u2190/\u2192]{/bold} Day  {bold}[m]{/bold} Model  {bold}[Esc]{/bold} Close';
 
       box.setContent(content);
       screen.render();
+    }
+
+    function formatLeaderboardEntry(entry, isMe) {
+      const rank = String(entry.rank).padStart(3);
+      const name = (entry.username || '?').padEnd(18);
+      const tokStr = formatCommaNum(entry.tokens || 0);
+      const compact = formatCompactNum(entry.tokens || 0);
+      // Right-align token count in a 12-char field
+      const tokenDisplay = tokStr.padStart(12);
+
+      if (isMe) {
+        return `  {yellow-fg}{bold}#${rank}  ${name} ${tokenDisplay}{/bold}{/yellow-fg}  {yellow-fg}\u25c0{/yellow-fg}\n`;
+      }
+      return `  {white-fg} #${rank}  ${name} ${tokenDisplay}{/white-fg}\n`;
     }
 
     async function fetchData() {
@@ -741,7 +841,7 @@ export async function main(overrides = {}) {
       try {
         leaderboardData = await sharing.getLeaderboard(currentDate, MODELS[currentModel], 50);
       } catch (err) {
-        errorMsg = `Leaderboard unavailable: ${err.message}`;
+        errorMsg = 'Leaderboard unavailable';
         leaderboardData = null;
       }
       loading = false;
@@ -784,6 +884,7 @@ export async function main(overrides = {}) {
 
   function shutdown() {
     clearInterval(resetTimer);
+    if (leaderboardRankTimer) clearInterval(leaderboardRankTimer);
     data.stop();
     sharing.stop();
     pinnedRow.stopAnimation();
@@ -814,4 +915,7 @@ export async function main(overrides = {}) {
 
   data.start(s.modelFilter, s.pinnedPeriod);
   sharing.start();
+
+  // Start leaderboard rank polling if opted in
+  startLeaderboardRankPolling();
 }

@@ -233,17 +233,27 @@ final class Database: Sendable {
         if let end = endDate {
             query = query.filter(Self.teTimestamp <= end)
         }
-        var results: [(model: String, outputTokens: Int, inputTokens: Int, cacheRead: Int, cacheCreate: Int)] = []
+        // Aggregate by model family (opus, sonnet, haiku) to merge variants
+        // like "claude-opus-4-6" and "claude-opus-4-6[1m]" into a single "opus" row.
+        var familyTotals: [String: (outputTokens: Int, inputTokens: Int, cacheRead: Int, cacheCreate: Int)] = [:]
         for row in try db.prepare(query) {
-            results.append((
-                model: row[Self.teModel],
-                outputTokens: row[Self.teOutputTokens.sum] ?? 0,
-                inputTokens: row[Self.teInputTokens.sum] ?? 0,
-                cacheRead: row[Self.teCacheRead.sum] ?? 0,
-                cacheCreate: row[Self.teCacheCreate.sum] ?? 0
-            ))
+            let rawModel = row[Self.teModel]
+            let family: String
+            if rawModel.contains("opus") { family = "opus" }
+            else if rawModel.contains("sonnet") { family = "sonnet" }
+            else if rawModel.contains("haiku") { family = "haiku" }
+            else { family = rawModel }
+
+            let existing = familyTotals[family] ?? (0, 0, 0, 0)
+            familyTotals[family] = (
+                outputTokens: existing.outputTokens + (row[Self.teOutputTokens.sum] ?? 0),
+                inputTokens: existing.inputTokens + (row[Self.teInputTokens.sum] ?? 0),
+                cacheRead: existing.cacheRead + (row[Self.teCacheRead.sum] ?? 0),
+                cacheCreate: existing.cacheCreate + (row[Self.teCacheCreate.sum] ?? 0)
+            )
         }
-        return results.sorted { $0.outputTokens > $1.outputTokens }
+        return familyTotals.map { (model: $0.key, outputTokens: $0.value.outputTokens, inputTokens: $0.value.inputTokens, cacheRead: $0.value.cacheRead, cacheCreate: $0.value.cacheCreate) }
+            .sorted { $0.outputTokens > $1.outputTokens }
     }
 
     /// Get distinct session count for a date range.

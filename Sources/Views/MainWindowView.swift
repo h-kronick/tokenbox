@@ -14,52 +14,88 @@ struct MainWindowView: View {
     @State private var showSharePopover = false
     @State private var isRegistering = false
     @State private var justRegistered = false
+    @State private var showLeaderboard = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            SplitFlapDisplayView(
-                pinnedLabel: $appState.pinnedLabel,
-                pinnedValue: $appState.pinnedValue,
-                contextLabel: $appState.displayLabel,
-                contextValue: $appState.displayValue,
-                contextSubtitle: appState.displaySubtitle,
-                modelName: modelDisplayName,
-                theme: currentTheme,
-                soundEnabled: soundEnabled,
-                animationSpeed: animationSpeed
-            )
+        HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                SplitFlapDisplayView(
+                    pinnedLabel: $appState.pinnedLabel,
+                    pinnedValue: $appState.pinnedValue,
+                    contextLabel: $appState.displayLabel,
+                    contextValue: $appState.displayValue,
+                    contextSubtitle: appState.displaySubtitle,
+                    modelName: modelDisplayName,
+                    theme: currentTheme,
+                    soundEnabled: soundEnabled,
+                    animationSpeed: animationSpeed
+                )
 
-            // Subtle share action at the bottom
-            Button {
-                if sharingManager.isRegistered {
-                    copyShareLink()
-                } else {
-                    showSharePopover = true
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    if sharingManager.isRegistered {
-                        Image(systemName: showCopied ? "checkmark.circle.fill" : "link")
-                            .font(.system(size: 13))
-                        Text(showCopied ? "Copied!" : sharingManager.myShareCode)
-                            .font(.system(size: 13, weight: .medium, design: .monospaced))
-                    } else {
-                        Image(systemName: "person.2")
-                            .font(.system(size: 13))
-                        Text("Start sharing")
-                            .font(.system(size: 13, weight: .medium))
+                // Bottom bar: share action + leaderboard toggle
+                HStack(spacing: 0) {
+                    // Share button (left-aligned)
+                    Button {
+                        if sharingManager.isRegistered {
+                            copyShareLink()
+                        } else {
+                            showSharePopover = true
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            if sharingManager.isRegistered {
+                                Image(systemName: showCopied ? "checkmark.circle.fill" : "link")
+                                    .font(.system(size: 13))
+                                Text(showCopied ? "Copied!" : sharingManager.myShareCode)
+                                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                            } else {
+                                Image(systemName: "person.2")
+                                    .font(.system(size: 13))
+                                Text("Start sharing")
+                                    .font(.system(size: 13, weight: .medium))
+                            }
+                        }
+                        .foregroundColor(showCopied ? currentTheme.characterColor : currentTheme.labelColor.opacity(0.6))
+                        .animation(.easeInOut(duration: 0.2), value: showCopied)
                     }
+                    .buttonStyle(.plain)
+                    .popover(isPresented: $showSharePopover, arrowEdge: .bottom) {
+                        sharePopoverContent
+                    }
+
+                    Spacer()
+
+                    // Leaderboard toggle (right-aligned)
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            showLeaderboard.toggle()
+                        }
+                        if showLeaderboard {
+                            Task { await sharingManager.fetchLeaderboard() }
+                        }
+                    } label: {
+                        Image(systemName: showLeaderboard ? "trophy.fill" : "trophy")
+                            .font(.system(size: 12))
+                            .foregroundColor(showLeaderboard ? currentTheme.characterColor : currentTheme.labelColor.opacity(0.4))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .foregroundColor(showCopied ? currentTheme.characterColor : currentTheme.labelColor.opacity(0.6))
-                .animation(.easeInOut(duration: 0.2), value: showCopied)
+                .padding(.horizontal, 16)
                 .padding(.vertical, 6)
             }
-            .buttonStyle(.plain)
-            .popover(isPresented: $showSharePopover, arrowEdge: .bottom) {
-                sharePopoverContent
+            .fixedSize()
+
+            if showLeaderboard {
+                Rectangle()
+                    .fill(currentTheme.subtleDivider)
+                    .frame(width: 1)
+
+                LeaderboardSidePanel(theme: currentTheme)
+                    .environmentObject(sharingManager)
+                    .frame(height: nil)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-        .fixedSize()
+        .fixedSize(horizontal: true, vertical: true)
         .background(currentTheme.backgroundColor)
         .ignoresSafeArea()
         .onAppear {

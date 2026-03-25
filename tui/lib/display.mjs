@@ -60,6 +60,9 @@ export class Display {
       tags: true,
     });
 
+    // Leaderboard rank indicator (shown when opted in)
+    this._leaderboardRank = null; // { rank: N, username: 'foo' }
+
     // Status bar
     this._statusBar = blessed.box({
       parent: this._box,
@@ -67,7 +70,7 @@ export class Display {
       left: 0,
       right: 0,
       height: 1,
-      content: '  [s]hare  [p]refs  [r]efresh  [q]uit',
+      content: ' [s]hare [l]eader [p]refs [r]efresh [q]uit',
       style: {
         bg: this._theme.bg,
         fg: this._theme.fg,
@@ -109,6 +112,14 @@ export class Display {
   setContextLabel(str, subtitle) {
     this._contextLabel = str.toUpperCase();
     this._contextSubtitle = subtitle || '';
+  }
+
+  setLeaderboardRank(rank, username) {
+    if (rank && username) {
+      this._leaderboardRank = { rank, username };
+    } else {
+      this._leaderboardRank = null;
+    }
   }
 
   setContextValue(str) {
@@ -185,8 +196,16 @@ export class Display {
     lines.push(`  ${cHinge}`);
     lines.push(`  ${cBottom}`);
 
-    // Empty line before status bar
-    lines.push('');
+    // Leaderboard rank indicator or empty line
+    if (this._leaderboardRank) {
+      const { rank, username } = this._leaderboardRank;
+      const rankStr = `#${rank} ${username}`;
+      const flapWidth = 35;
+      const pad = Math.max(0, flapWidth - rankStr.length);
+      lines.push(`  ${' '.repeat(pad)}${rankStr}`);
+    } else {
+      lines.push('');
+    }
 
     this._box.setContent(lines.join('\n'));
     this._screen.render();
