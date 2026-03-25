@@ -7,8 +7,8 @@ import { getDb, getConfig, setConfig } from '../../skill/lib/db.mjs';
 import { currentPSTDate } from './formatting.mjs';
 
 const API_BASE = 'https://tokenbox.club';
-const PUSH_INTERVAL_MS = 60_000;
-const FETCH_INTERVAL_MS = 60_000;
+const PUSH_INTERVAL_MS = 30_000;
+const FETCH_INTERVAL_MS = 30_000;
 const PUSH_THROTTLE_MS = 10_000;
 const DEFAULT_FRIEND_CODE = 'XNBGBU';
 

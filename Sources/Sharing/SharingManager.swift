@@ -218,8 +218,8 @@ final class SharingManager: ObservableObject {
         pushTimer?.cancel()
         fetchTimer?.cancel()
 
-        // Combined push + fetch every 60 seconds
-        pushTimer = Timer.publish(every: 60, on: .main, in: .common)
+        // Combined push + fetch every 30 seconds
+        pushTimer = Timer.publish(every: 30, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
                 guard let self else { return }
@@ -227,6 +227,7 @@ final class SharingManager: ObservableObject {
                     await self.periodicPushHandler?()
                     await self.fetchAllFriends()
                     await self.fetchLeaderboard()
+                    self.syncFriendsFromLeaderboard()
                 }
             }
     }
@@ -435,6 +436,38 @@ final class SharingManager: ObservableObject {
             leaderboardEntries = entries
         } catch {
             // Silently keep stale entries on fetch failure
+        }
+    }
+
+    /// Cross-reference leaderboard entries with friends to keep token values in sync.
+    /// If a friend's display name matches a leaderboard username, update the friend's
+    /// today tokens to match the leaderboard value. This ensures the context row and
+    /// leaderboard panel always show the same number for the same user.
+    private func syncFriendsFromLeaderboard() {
+        guard !leaderboardEntries.isEmpty, !friends.isEmpty else { return }
+
+        // Build lookup: lowercase username → leaderboard tokens
+        var lbLookup: [String: Int] = [:]
+        for entry in leaderboardEntries {
+            lbLookup[entry.username.lowercased()] = entry.tokens
+        }
+
+        var changed = false
+        for i in friends.indices {
+            let friendName = friends[i].displayName.lowercased()
+            if let lbTokens = lbLookup[friendName] {
+                // Update the friend's today model breakdown with the leaderboard value.
+                // The leaderboard fetches the model-specific value (e.g. opus tokens),
+                // so this keeps the friend display in sync for the current model filter.
+                let currentTokens = friends[i].tokens(for: nil, period: "today")
+                if currentTokens != lbTokens {
+                    friends[i].todayTokens = lbTokens
+                    changed = true
+                }
+            }
+        }
+        if changed {
+            saveFriends()
         }
     }
 

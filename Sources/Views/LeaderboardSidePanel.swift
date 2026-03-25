@@ -255,14 +255,6 @@ struct LeaderboardSidePanel: View {
             await sharingManager.fetchLeaderboard(model: selectedModel)
             isLoading = false
         }
-        .task(id: "leaderboard-refresh") {
-            // Auto-refresh every 60 seconds while the panel is visible
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(60))
-                guard !Task.isCancelled else { break }
-                await sharingManager.fetchLeaderboard(model: selectedModel)
-            }
-        }
     }
 
     // MARK: - Row
