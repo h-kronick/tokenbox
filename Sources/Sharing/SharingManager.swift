@@ -17,6 +17,9 @@ final class SharingManager: ObservableObject {
     @Published var leaderboardOptIn: Bool = false
     @Published var leaderboardUsername: String = ""
     @Published var leaderboardEntries: [LeaderboardEntry] = []
+    /// The model the leaderboard panel is currently showing. Set by LeaderboardSidePanel
+    /// so the periodic fetch uses the correct model tab.
+    var leaderboardModel: String = "opus"
 
     private var friendsJSON: String {
         get { UserDefaults.standard.string(forKey: "friendsJSON") ?? "[]" }
@@ -226,7 +229,7 @@ final class SharingManager: ObservableObject {
                 Task {
                     await self.periodicPushHandler?()
                     await self.fetchAllFriends()
-                    await self.fetchLeaderboard()
+                    await self.fetchLeaderboard(model: self.leaderboardModel)
                     self.syncFriendsFromLeaderboard()
                 }
             }
