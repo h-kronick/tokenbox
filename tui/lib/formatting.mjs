@@ -102,15 +102,35 @@ export function timeAgo(isoString) {
 }
 
 /**
- * Calculate time remaining until midnight local time.
- * @returns {string} e.g. "5h 23m"
+ * Calculate time remaining until PST/PDT midnight (America/Los_Angeles).
+ * @returns {string} e.g. "resets in 5h 23m"
  */
 export function timeUntilReset() {
   const now = new Date();
-  const midnight = new Date(now);
-  midnight.setHours(24, 0, 0, 0);
-  const diffMs = midnight.getTime() - now.getTime();
-  const hours = Math.floor(diffMs / (1000 * 60 * 60));
-  const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-  return `${hours}h ${minutes}m`;
+  // Get current time in PST/PDT (America/Los_Angeles)
+  const pstParts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    hour: 'numeric', minute: 'numeric', second: 'numeric',
+    hour12: false,
+  }).formatToParts(now);
+  const h = parseInt(pstParts.find(p => p.type === 'hour').value, 10);
+  const m = parseInt(pstParts.find(p => p.type === 'minute').value, 10);
+  const s = parseInt(pstParts.find(p => p.type === 'second').value, 10);
+  const secondsUntilMidnight = (24 * 3600) - (h * 3600 + m * 60 + s);
+  const hours = Math.floor(secondsUntilMidnight / 3600);
+  const minutes = Math.floor((secondsUntilMidnight % 3600) / 60);
+  if (hours === 0 && minutes === 0) return 'resets in <1m';
+  if (hours === 0) return `resets in ${minutes}m`;
+  return `resets in ${hours}h ${minutes}m`;
+}
+
+/**
+ * Get the current date string in PST/PDT (America/Los_Angeles).
+ * @returns {string} e.g. "2026-03-25"
+ */
+export function currentPSTDate() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
 }

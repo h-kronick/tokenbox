@@ -60,6 +60,8 @@ class TokenDataStore: ObservableObject {
     private let aggregator: DataAggregator
     private var liveTimeoutTask: Task<Void, Never>?
     private var debouncedRefreshWork: DispatchWorkItem?
+    private var periodicRefreshTimer: Timer?
+    private var lastRefreshPSTDate: String = ""
 
     // MARK: - Init
 
@@ -107,15 +109,24 @@ class TokenDataStore: ObservableObject {
         jsonlWatcher.start()
         liveWatcher.start()
         refresh()
+        startPeriodicRefresh()
     }
 
     func stopWatching() {
         jsonlWatcher.stop()
         liveWatcher.stop()
         liveTimeoutTask?.cancel()
+        periodicRefreshTimer?.invalidate()
+        periodicRefreshTimer = nil
     }
 
     func refresh() {
+        // Track PST date for day boundary detection
+        let pstFormatter = DateFormatter()
+        pstFormatter.dateFormat = "yyyy-MM-dd"
+        pstFormatter.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        lastRefreshPSTDate = pstFormatter.string(from: Date())
+
         // Reset intermediate delta — DB totals now include completed events
         realtimeDelta = 0
 
@@ -212,6 +223,36 @@ class TokenDataStore: ObservableObject {
         }
         debouncedRefreshWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+    }
+
+    // MARK: - Periodic Refresh
+
+    private func startPeriodicRefresh() {
+        // Check every 60 seconds if the PST day has changed
+        periodicRefreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.checkDayBoundary()
+            }
+        }
+        // Also refresh on app becoming active (handles macOS app suspension)
+        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.checkDayBoundary()
+            }
+        }
+    }
+
+    private func checkDayBoundary() {
+        let pst = TimeZone(identifier: "America/Los_Angeles")!
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = pst
+        let currentPSTDate = formatter.string(from: Date())
+
+        if currentPSTDate != lastRefreshPSTDate {
+            lastRefreshPSTDate = currentPSTDate
+            refresh()
+        }
     }
 
     // MARK: - Private

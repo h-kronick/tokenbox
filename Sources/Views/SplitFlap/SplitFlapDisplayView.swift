@@ -162,7 +162,9 @@ struct SplitFlapDisplayView: View {
     /// Compact time remaining until midnight (daily token reset).
     /// Short format for e-ink subtitle: "11h 46m", "46m", "<1m"
     private var resetsInString: String {
-        let calendar = Calendar.current
+        let pst = TimeZone(identifier: "America/Los_Angeles")!
+        var calendar = Calendar.current
+        calendar.timeZone = pst
         guard let midnight = calendar.nextDate(after: now, matching: DateComponents(hour: 0, minute: 0, second: 0), matchingPolicy: .nextTime) else {
             return "0:00"
         }
@@ -170,7 +172,7 @@ struct SplitFlapDisplayView: View {
         let h = total / 3600
         let m = (total % 3600) / 60
         if total < 60 {
-            return "resets in <1m"
+            return "resets in <1m PST"
         } else if h == 0 {
             return "resets in \(m)m"
         }

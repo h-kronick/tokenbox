@@ -15,10 +15,10 @@ struct LeaderboardSidePanel: View {
 
     private let panelWidth: CGFloat = 210
 
-    private static let utcDateFormatter: DateFormatter = {
+    private static let pstDateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
-        f.timeZone = TimeZone(identifier: "UTC")
+        f.timeZone = TimeZone(identifier: "America/Los_Angeles")
         return f
     }()
 
@@ -157,7 +157,7 @@ struct LeaderboardSidePanel: View {
                     Spacer()
                 }
 
-                Text(Self.utcDateFormatter.string(from: Date()))
+                Text(Self.pstDateFormatter.string(from: Date()) + " PST")
                     .font(.system(size: 9, design: .monospaced))
                     .foregroundColor(theme.sectionLabel.opacity(0.7))
             }

@@ -4,7 +4,7 @@ import blessed from 'blessed';
 import { Display, THEMES } from './lib/display.mjs';
 import { SplitFlapRow } from './lib/animation.mjs';
 import { TOKEN_POSITION_SETS } from './lib/charsets.mjs';
-import { formatTokens, formatModelName, timeUntilReset } from './lib/formatting.mjs';
+import { formatTokens, formatModelName, timeUntilReset, currentPSTDate } from './lib/formatting.mjs';
 import { DataManager } from './lib/data.mjs';
 import { SharingManager } from './lib/sharing.mjs';
 import { SettingsManager } from './lib/settings.mjs';
@@ -496,7 +496,7 @@ export async function main(overrides = {}) {
     if (!myUsername) return;
 
     try {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = currentPSTDate();
       const model = s.modelFilter === 'all' ? 'opus' : s.modelFilter;
       const data = await sharing.getLeaderboard(today, model, 50);
       if (data && data.entries) {
@@ -755,7 +755,7 @@ export async function main(overrides = {}) {
     const MODELS = ['opus', 'sonnet', 'haiku'];
     let currentModel = MODELS.indexOf(s.modelFilter !== 'all' ? s.modelFilter : 'opus');
     if (currentModel < 0) currentModel = 0;
-    let currentDate = new Date().toISOString().slice(0, 10);
+    let currentDate = currentPSTDate();
     let leaderboardData = null;
     let loading = true;
     let errorMsg = null;
@@ -765,7 +765,7 @@ export async function main(overrides = {}) {
     box.focus();
 
     function renderBoard() {
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = currentPSTDate();
       const isToday = currentDate === todayStr;
       const liveTag = isToday ? '  {green-fg}[live]{/green-fg}' : '';
 
@@ -861,7 +861,7 @@ export async function main(overrides = {}) {
     });
 
     box.key(['right'], () => {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = currentPSTDate();
       if (currentDate >= today) return;
       const d = new Date(currentDate + 'T12:00:00');
       d.setDate(d.getDate() + 1);

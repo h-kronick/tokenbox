@@ -8,7 +8,7 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import chokidar from 'chokidar';
 import { getDb, closeDb } from '../../skill/lib/db.mjs';
 import { parseLine } from '../../skill/lib/jsonl-parser.mjs';
-import { formatTokens, formatModelName, timeUntilReset, timeAgo } from './formatting.mjs';
+import { formatTokens, formatModelName, timeUntilReset, timeAgo, currentPSTDate } from './formatting.mjs';
 
 const CONTEXT_ROTATION_MS = 15_000;
 
@@ -45,6 +45,8 @@ export class DataManager extends EventEmitter {
     this._lastLiveOut = 0;
     this._lastLiveSid = null;
     this._firstLiveEvent = true;
+    this._lastPSTDate = null;
+    this._periodicTimer = null;
   }
 
   start(modelFilter, pinnedPeriod) {
@@ -67,6 +69,7 @@ export class DataManager extends EventEmitter {
     this._startWatcher();
     this._startJSONLWatcher();
     this._startContextRotation();
+    this._startPeriodicRefresh();
   }
 
   stop() {
@@ -81,6 +84,10 @@ export class DataManager extends EventEmitter {
     if (this._rotationTimer) {
       clearInterval(this._rotationTimer);
       this._rotationTimer = null;
+    }
+    if (this._periodicTimer) {
+      clearInterval(this._periodicTimer);
+      this._periodicTimer = null;
     }
     if (this._refreshTimer) {
       clearInterval(this._refreshTimer);
@@ -383,6 +390,22 @@ export class DataManager extends EventEmitter {
     } catch {
       return 0;
     }
+  }
+
+  _startPeriodicRefresh() {
+    // Track current PST date
+    this._lastPSTDate = currentPSTDate();
+
+    // Check every 60 seconds if the PST day has changed
+    this._periodicTimer = setInterval(() => {
+      const now = currentPSTDate();
+      if (now !== this._lastPSTDate) {
+        this._lastPSTDate = now;
+        this._realtimeDelta = 0;
+        this._firstLiveEvent = true;
+        this._refreshTokens();
+      }
+    }, 60_000);
   }
 
   _startContextRotation() {
