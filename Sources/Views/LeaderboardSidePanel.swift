@@ -270,7 +270,7 @@ struct LeaderboardSidePanel: View {
                 .foregroundColor(textColor)
                 .frame(width: 22, alignment: .trailing)
 
-            Text(entry.username)
+            Text("@\(entry.username)")
                 .font(.system(size: 10, weight: entry.isMe ? .bold : .regular, design: .monospaced))
                 .foregroundColor(textColor)
                 .lineLimit(1)

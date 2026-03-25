@@ -845,7 +845,7 @@ export async function main(overrides = {}) {
 
     function formatLeaderboardEntry(entry, isMe) {
       const rank = String(entry.rank).padStart(3);
-      const name = (entry.username || '?').padEnd(18);
+      const name = ('@' + (entry.username || '?')).padEnd(18);
       const tokStr = formatCommaNum(entry.tokens || 0);
       const compact = formatCompactNum(entry.tokens || 0);
       // Right-align token count in a 12-char field

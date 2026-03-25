@@ -216,7 +216,7 @@ export class Display {
     // Leaderboard rank indicator or empty line
     if (this._leaderboardRank) {
       const { rank, username } = this._leaderboardRank;
-      const rankStr = `#${rank} ${username}`;
+      const rankStr = `#${rank} @${username}`;
       const flapWidth = 35;
       const pad = Math.max(0, flapWidth - rankStr.length);
       lines.push(`  ${' '.repeat(pad)}${rankStr}`);
