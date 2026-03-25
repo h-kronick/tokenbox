@@ -53,10 +53,11 @@ struct CloudFriend: Codable, Equatable, Sendable, Identifiable {
     private static let dayFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = TimeZone(identifier: "America/Los_Angeles")!
         return f
     }()
 
-    /// Whether the stored todayDate matches the viewer's local today.
+    /// Whether the stored todayDate matches today in PST (standardized timezone).
     var isTodayCurrent: Bool {
         return todayDate == Self.dayFormatter.string(from: Date())
     }

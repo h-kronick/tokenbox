@@ -35,6 +35,7 @@ final class SharingManager: ObservableObject {
     private static let dayFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = TimeZone(identifier: "America/Los_Angeles")!
         return f
     }()
 

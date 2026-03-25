@@ -4,6 +4,7 @@
 import { EventEmitter } from 'node:events';
 import { execSync } from 'node:child_process';
 import { getDb, getConfig, setConfig } from '../../skill/lib/db.mjs';
+import { currentPSTDate } from './formatting.mjs';
 
 const API_BASE = 'https://tokenbox.club';
 const PUSH_INTERVAL_MS = 60_000;
@@ -189,7 +190,7 @@ export class SharingManager extends EventEmitter {
   }
 
   getFriends(modelFilter) {
-    const today = _localTodayStr();
+    const today = currentPSTDate();
     return this._friends.map(f => {
       let tokens = f.tokens || 0;
 
@@ -218,7 +219,7 @@ export class SharingManager extends EventEmitter {
     if (!code || !token) return;
 
     const tokens = this._data.getTokens();
-    const today = _localTodayStr();
+    const today = currentPSTDate();
 
     // Populate per-model breakdown for all periods (matches macOS buildModelMap)
     const tokensByModel = this._data.getTokensByModel('today');
@@ -347,7 +348,7 @@ export class SharingManager extends EventEmitter {
   }
 
   async _fetchAllFriends() {
-    const today = _localTodayStr();
+    const today = currentPSTDate();
     let changed = false;
 
     for (const friend of this._friends) {
@@ -458,9 +459,4 @@ function _readMacDefault(key) {
   } catch { return null; }
 }
 
-function _localTodayStr() {
-  const d = new Date();
-  return d.getFullYear()
-    + '-' + String(d.getMonth() + 1).padStart(2, '0')
-    + '-' + String(d.getDate()).padStart(2, '0');
-}
+// PST date for sharing is provided by currentPSTDate() from formatting.mjs
