@@ -98,6 +98,10 @@ struct LeaderboardEntry: Codable, Identifiable {
     let optedIn: Bool
     var isMe: Bool = false
     var id: String { username }
+
+    enum CodingKeys: String, CodingKey {
+        case rank, username, tokens, optedIn
+    }
 }
 
 /// live.json event from status-relay hook

@@ -73,9 +73,13 @@ struct MainWindowView: View {
                             Task { await sharingManager.fetchLeaderboard() }
                         }
                     } label: {
-                        Image(systemName: showLeaderboard ? "trophy.fill" : "trophy")
-                            .font(.system(size: 12))
-                            .foregroundColor(showLeaderboard ? currentTheme.characterColor : currentTheme.labelColor.opacity(0.4))
+                        HStack(spacing: 4) {
+                            Image(systemName: showLeaderboard ? "trophy.fill" : "trophy")
+                                .font(.system(size: 12))
+                            Text("Leaderboard")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .foregroundColor(showLeaderboard ? currentTheme.characterColor : currentTheme.labelColor.opacity(0.4))
                     }
                     .buttonStyle(.plain)
                 }
