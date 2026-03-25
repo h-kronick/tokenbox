@@ -15,6 +15,8 @@ struct MainWindowView: View {
     @State private var isRegistering = false
     @State private var justRegistered = false
     @State private var showLeaderboard = false
+    @State private var showUpdatePopover = false
+    @StateObject private var updateChecker = UpdateChecker()
 
     var body: some View {
         HStack(spacing: 0) {
@@ -64,6 +66,55 @@ struct MainWindowView: View {
 
                     Spacer()
 
+                    // Update indicator
+                    if updateChecker.updateAvailable {
+                        Button {
+                            showUpdatePopover = true
+                        } label: {
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(Color.green)
+                                    .frame(width: 5, height: 5)
+                                Text("Update")
+                                    .font(.system(size: 11, weight: .medium))
+                            }
+                            .foregroundColor(.green.opacity(0.8))
+                        }
+                        .buttonStyle(.plain)
+                        .popover(isPresented: $showUpdatePopover, arrowEdge: .bottom) {
+                            VStack(spacing: 10) {
+                                Text("New version available")
+                                    .font(.system(size: 12, weight: .semibold))
+
+                                HStack {
+                                    Text("tokenbox update")
+                                        .font(.system(size: 12, design: .monospaced))
+                                        .padding(8)
+                                        .background(Color.black.opacity(0.3))
+                                        .cornerRadius(6)
+
+                                    Button {
+                                        NSPasteboard.general.clearContents()
+                                        NSPasteboard.general.setString("tokenbox update", forType: .string)
+                                    } label: {
+                                        Image(systemName: "doc.on.doc")
+                                            .font(.system(size: 11))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+
+                                Button("Dismiss") {
+                                    updateChecker.dismiss()
+                                    showUpdatePopover = false
+                                }
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            }
+                            .padding(16)
+                            .frame(width: 220)
+                        }
+                    }
+
                     // Leaderboard toggle (right-aligned)
                     Button {
                         withAnimation(.easeInOut(duration: 0.25)) {
@@ -104,6 +155,7 @@ struct MainWindowView: View {
         .ignoresSafeArea()
         .onAppear {
             dataStore.startWatching()
+            updateChecker.startChecking()
             // Give AppState direct access to data sources for rotation rebuilds
             appState.dataStore = dataStore
             appState.sharingManager = sharingManager
@@ -159,6 +211,7 @@ struct MainWindowView: View {
         }
         .onDisappear {
             dataStore.stopWatching()
+            updateChecker.stopChecking()
             appState.stopContextRotation()
             sharingManager.stopTimers()
         }

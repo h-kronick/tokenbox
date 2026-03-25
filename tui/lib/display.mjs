@@ -63,6 +63,9 @@ export class Display {
     // Leaderboard rank indicator (shown when opted in)
     this._leaderboardRank = null; // { rank: N, username: 'foo' }
 
+    // Update available indicator
+    this._updateAvailable = false;
+
     // Status bar
     this._statusBar = blessed.box({
       parent: this._box,
@@ -79,6 +82,15 @@ export class Display {
     });
 
     // Note: Ctrl+C / quit handled in app.mjs shutdown()
+  }
+
+  _updateStatusBar() {
+    const base = ' [s]hare [l]eader [p]refs [r]efresh [q]uit';
+    if (this._updateAvailable) {
+      this._statusBar.setContent(`${base}  {green-fg}↑ update [u]{/green-fg}`);
+    } else {
+      this._statusBar.setContent(base);
+    }
   }
 
   getScreen() {
@@ -120,6 +132,11 @@ export class Display {
     } else {
       this._leaderboardRank = null;
     }
+  }
+
+  setUpdateAvailable(val) {
+    this._updateAvailable = !!val;
+    this._updateStatusBar();
   }
 
   setContextValue(str) {

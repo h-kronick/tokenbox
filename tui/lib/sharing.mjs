@@ -118,7 +118,12 @@ export class SharingManager extends EventEmitter {
         displayName: friendData.displayName || code,
         nickname: null,
         tokens: friendData.todayTokens || 0,
+        tokensByModel: friendData.tokensByModel || {},
+        weekByModel: friendData.weekByModel || {},
+        monthByModel: friendData.monthByModel || {},
+        allTimeByModel: friendData.allTimeByModel || {},
         todayDate: friendData.todayDate || null,
+        lastTokenChange: friendData.lastTokenChange || null,
       };
       this._friends.push(friend);
       this._persistFriends();
@@ -154,7 +159,12 @@ export class SharingManager extends EventEmitter {
       displayName: friendData.displayName || code,
       nickname: null,
       tokens: friendData.todayTokens || 0,
+      tokensByModel: friendData.tokensByModel || {},
+      weekByModel: friendData.weekByModel || {},
+      monthByModel: friendData.monthByModel || {},
+      allTimeByModel: friendData.allTimeByModel || {},
       todayDate: friendData.todayDate || null,
+      lastTokenChange: friendData.lastTokenChange || null,
     };
 
     this._friends.push(friend);
@@ -358,6 +368,9 @@ export class SharingManager extends EventEmitter {
         if (friend.tokens !== newTokens || friend.displayName !== data.displayName) {
           friend.tokens = data.todayTokens || 0;
           friend.tokensByModel = data.tokensByModel || {};
+          friend.weekByModel = data.weekByModel || {};
+          friend.monthByModel = data.monthByModel || {};
+          friend.allTimeByModel = data.allTimeByModel || {};
           friend.todayDate = data.todayDate || null;
           friend.displayName = data.displayName || friend.code;
           friend.lastTokenChange = data.lastTokenChange || data.lastUpdated || null;
@@ -425,6 +438,9 @@ export class SharingManager extends EventEmitter {
               nickname: f.nickname || nicknameMap[code] || null,
               tokens: f.todayTokens || 0,
               tokensByModel: f.tokensByModel || {},
+              weekByModel: f.weekByModel || {},
+              monthByModel: f.monthByModel || {},
+              allTimeByModel: f.allTimeByModel || {},
               todayDate: f.todayDate || null,
               lastTokenChange: f.lastTokenChange || null,
             };

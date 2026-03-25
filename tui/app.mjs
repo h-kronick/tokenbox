@@ -8,6 +8,7 @@ import { formatTokens, formatModelName, timeUntilReset, currentPSTDate } from '.
 import { DataManager } from './lib/data.mjs';
 import { SharingManager } from './lib/sharing.mjs';
 import { SettingsManager } from './lib/settings.mjs';
+import { UpdateChecker } from './lib/update-checker.mjs';
 
 const MODEL_CYCLE = ['opus', 'sonnet', 'haiku', 'all'];
 const PERIOD_CYCLE = ['today', 'week', 'month', 'allTime'];
@@ -154,6 +155,29 @@ export async function main(overrides = {}) {
   screen.key(['l'], () => {
     if (activeOverlay) return;
     showLeaderboardOverlay();
+  });
+
+  // --- Update checker ---
+
+  const updateChecker = new UpdateChecker();
+
+  screen.key(['u'], () => {
+    if (activeOverlay || !updateChecker.updateAvailable) return;
+    const box = createOverlay('Update Available', 9);
+    box.setContent(
+      '\n  {green-fg}A new version is available!{/green-fg}\n\n' +
+      '  Run this command to update:\n\n' +
+      '  {bold}tokenbox update{/bold}\n\n' +
+      '  {bold}[d]{/bold} Dismiss    {bold}[Esc]{/bold} Close'
+    );
+    box.key(['d'], () => {
+      updateChecker.dismiss();
+      box.destroy();
+      activeOverlay = null;
+      screen.render();
+    });
+    box.focus();
+    screen.render();
   });
 
   // --- Overlays ---
@@ -885,6 +909,7 @@ export async function main(overrides = {}) {
   function shutdown() {
     clearInterval(resetTimer);
     if (leaderboardRankTimer) clearInterval(leaderboardRankTimer);
+    updateChecker.stop();
     data.stop();
     sharing.stop();
     pinnedRow.stopAnimation();
@@ -918,4 +943,11 @@ export async function main(overrides = {}) {
 
   // Start leaderboard rank polling if opted in
   startLeaderboardRankPolling();
+
+  // Start update checker
+  updateChecker.start();
+  updateChecker.onUpdate((available) => {
+    display.setUpdateAvailable(available);
+    display.render();
+  });
 }
