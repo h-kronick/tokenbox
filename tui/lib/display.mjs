@@ -49,8 +49,8 @@ export class Display {
       parent: screen,
       top: 'center',
       left: 'center',
-      width: MIN_WIDTH + 2,
-      height: 16,
+      width: MIN_WIDTH + 4,
+      height: 18,
       border: { type: 'line' },
       style: {
         border: { fg: this._theme.border },

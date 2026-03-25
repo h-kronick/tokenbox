@@ -273,7 +273,31 @@ case "${1:-}" in
       (cd "$REPO_DIR" && swift build 2>&1 | grep -E "Build complete|error:" | tail -3)
     fi
     (cd "$REPO_DIR/tui" && npm ci --production 2>&1 | tail -1)
-    echo "Updated. Restart TokenBox to apply changes."
+
+    # Auto-restart running instances
+    _RESTARTED=false
+    if [ "$_MACOS_NATIVE" = "true" ] && pgrep -x "TokenBox" > /dev/null 2>&1; then
+      echo "Restarting TokenBox app..."
+      killall -TERM "TokenBox" 2>/dev/null
+      sleep 1
+      # Wait up to 3s for clean exit
+      for i in 1 2 3; do
+        pgrep -x "TokenBox" > /dev/null 2>&1 || break
+        sleep 1
+      done
+      launch_native
+      _RESTARTED=true
+    fi
+    # Signal any running TUI to exit (it will show "update & restart" prompt on next launch)
+    if pkill -USR1 -f "node.*tui/index.mjs" 2>/dev/null; then
+      echo "TUI signaled to restart. Re-run 'tokenbox tui' to launch the updated version."
+      _RESTARTED=true
+    fi
+    if [ "$_RESTARTED" = "false" ]; then
+      echo "Updated successfully."
+    else
+      echo "Updated and restarted."
+    fi
     ;;
   tui)
     shift

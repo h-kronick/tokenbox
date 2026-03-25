@@ -39,6 +39,13 @@ for (let i = 0; i < args.length; i++) {
   }
 }
 
+// SIGUSR1 — sent by `tokenbox update` to signal a clean restart
+process.on('SIGUSR1', () => {
+  try { process.stdout.write('\x1b[?1049l\x1b[?25h'); } catch {}
+  console.log('\nTokenBox updated. Restart with: tokenbox tui');
+  process.exit(0);
+});
+
 // Handle uncaught errors — restore terminal before crashing
 process.on('uncaughtException', (err) => {
   // Try to restore terminal

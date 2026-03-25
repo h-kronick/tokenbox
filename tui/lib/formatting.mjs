@@ -119,9 +119,9 @@ export function timeUntilReset() {
   const secondsUntilMidnight = (24 * 3600) - (h * 3600 + m * 60 + s);
   const hours = Math.floor(secondsUntilMidnight / 3600);
   const minutes = Math.floor((secondsUntilMidnight % 3600) / 60);
-  if (hours === 0 && minutes === 0) return 'resets in <1m';
-  if (hours === 0) return `resets in ${minutes}m`;
-  return `resets in ${hours}h ${minutes}m`;
+  if (hours === 0 && minutes === 0) return '<1m';
+  if (hours === 0) return `${minutes}m`;
+  return `${hours}h ${minutes}m`;
 }
 
 /**

@@ -66,7 +66,7 @@ struct MainWindowView: View {
 
                     Spacer()
 
-                    // Update indicator
+                    // Update indicator — subtle pulsing dot + label
                     if updateChecker.updateAvailable {
                         Button {
                             showUpdatePopover = true
@@ -75,7 +75,7 @@ struct MainWindowView: View {
                                 Circle()
                                     .fill(Color.green)
                                     .frame(width: 5, height: 5)
-                                Text("Update")
+                                Text("Update available")
                                     .font(.system(size: 11, weight: .medium))
                             }
                             .foregroundColor(.green.opacity(0.8))

@@ -43,8 +43,8 @@ final class UpdateChecker: ObservableObject {
 
     private func check() async {
         do {
-            let localSHA = try runGit("rev-parse", "HEAD", in: repoPath).prefix(12)
-            let lsRemoteOutput = try runGit("ls-remote", remoteURL, "HEAD")
+            let localSHA = try runGit(["-C", repoPath, "rev-parse", "HEAD"]).prefix(12)
+            let lsRemoteOutput = try runGit(["ls-remote", remoteURL, "HEAD"])
             // Output format: "<sha>\tHEAD\n"
             let remoteSHA = String(lsRemoteOutput.split(separator: "\t").first?.prefix(12) ?? "")
 
@@ -53,6 +53,7 @@ final class UpdateChecker: ObservableObject {
             lastRemoteSHA = remoteSHA
 
             if String(localSHA) != remoteSHA && remoteSHA != dismissedSHA {
+                logger.info("Update available: local=\(localSHA) remote=\(remoteSHA)")
                 updateAvailable = true
             } else {
                 updateAvailable = false
@@ -62,18 +63,18 @@ final class UpdateChecker: ObservableObject {
         }
     }
 
-    private func runGit(_ args: String..., in directory: String? = nil) throws -> String {
+    private func runGit(_ args: [String]) throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         process.arguments = args
-        if let dir = directory {
-            process.currentDirectoryURL = URL(fileURLWithPath: dir)
-        }
         let pipe = Pipe()
         process.standardOutput = pipe
-        process.standardError = Pipe()  // Silence stderr
+        process.standardError = FileHandle.nullDevice
         try process.run()
         process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            throw NSError(domain: "UpdateChecker", code: Int(process.terminationStatus))
+        }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
