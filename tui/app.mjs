@@ -151,6 +151,11 @@ export async function main(overrides = {}) {
     showPrefsOverlay();
   });
 
+  screen.key(['l'], () => {
+    if (activeOverlay) return;
+    showLeaderboardOverlay();
+  });
+
   // --- Overlays ---
 
   function createOverlay(title, height) {
@@ -478,6 +483,293 @@ export async function main(overrides = {}) {
 
     box.focus();
     renderPrefs();
+  }
+
+  // --- Leaderboard overlay ---
+
+  function showLeaderboardOverlay() {
+    // Guard: must be registered for sharing
+    if (!sharing.isRegistered()) {
+      const box = createOverlay('Leaderboard', 5);
+      box.setContent('  Register for sharing first (press s)');
+      box.focus();
+      screen.render();
+      setTimeout(() => {
+        if (activeOverlay === box) {
+          box.destroy();
+          activeOverlay = null;
+          screen.render();
+        }
+      }, 2000);
+      return;
+    }
+
+    if (sharing.isLeaderboardOptIn()) {
+      showLeaderboardView();
+    } else {
+      showLeaderboardOptIn();
+    }
+  }
+
+  function showLeaderboardOptIn() {
+    // Step 1: Info screen
+    const box = createOverlay('Leaderboard', 11);
+    box.setContent(
+      '\n  Join the public daily leaderboard.\n' +
+      '  Only your username and daily output\n' +
+      '  token count are visible. All other\n' +
+      '  Claude data stays private.\n\n' +
+      '  {bold}[Enter]{/bold} Enable  {bold}[Esc]{/bold} Cancel'
+    );
+    box.focus();
+    screen.render();
+
+    box.key(['enter'], () => {
+      box.destroy();
+      activeOverlay = null;
+      showLeaderboardUsernameStep();
+    });
+  }
+
+  function showLeaderboardUsernameStep() {
+    const box = createOverlay('Claim Username', 10);
+
+    const info = blessed.box({
+      parent: box,
+      top: 0,
+      left: 2,
+      right: 2,
+      height: 2,
+      content: '  3-15 chars, letters/numbers/_',
+      style: { bg: 'black', fg: 'white' },
+    });
+
+    const prompt = blessed.textbox({
+      parent: box,
+      top: 2,
+      left: 2,
+      right: 2,
+      height: 3,
+      border: { type: 'line' },
+      label: ' Username ',
+      style: {
+        border: { fg: 'white' },
+        bg: 'black',
+        fg: 'white',
+      },
+      inputOnFocus: true,
+    });
+
+    const status = blessed.box({
+      parent: box,
+      top: 6,
+      left: 2,
+      right: 2,
+      height: 1,
+      content: '',
+      style: { bg: 'black', fg: 'yellow' },
+    });
+
+    prompt.focus();
+    screen.render();
+
+    prompt.on('submit', (value) => {
+      const username = (value || '').trim();
+      if (!username || username.length < 3 || username.length > 15) {
+        status.setContent('  Username must be 3-15 characters');
+        screen.render();
+        prompt.focus();
+        return;
+      }
+      if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+        status.setContent('  Letters, numbers, and _ only');
+        screen.render();
+        prompt.focus();
+        return;
+      }
+      box.destroy();
+      activeOverlay = null;
+      showLeaderboardEmailStep(username);
+    });
+
+    prompt.on('cancel', () => {
+      box.destroy();
+      activeOverlay = null;
+      screen.render();
+    });
+  }
+
+  function showLeaderboardEmailStep(username) {
+    const box = createOverlay('Email', 10);
+
+    const info = blessed.box({
+      parent: box,
+      top: 0,
+      left: 2,
+      right: 2,
+      height: 2,
+      content: '  Private — never displayed publicly',
+      style: { bg: 'black', fg: 'white' },
+    });
+
+    const prompt = blessed.textbox({
+      parent: box,
+      top: 2,
+      left: 2,
+      right: 2,
+      height: 3,
+      border: { type: 'line' },
+      label: ' Email ',
+      style: {
+        border: { fg: 'white' },
+        bg: 'black',
+        fg: 'white',
+      },
+      inputOnFocus: true,
+    });
+
+    const status = blessed.box({
+      parent: box,
+      top: 6,
+      left: 2,
+      right: 2,
+      height: 1,
+      content: '',
+      style: { bg: 'black', fg: 'yellow' },
+    });
+
+    prompt.focus();
+    screen.render();
+
+    prompt.on('submit', async (value) => {
+      const email = (value || '').trim();
+      if (!email || !/.+@.+\..+/.test(email)) {
+        status.setContent('  Enter a valid email address');
+        screen.render();
+        prompt.focus();
+        return;
+      }
+
+      status.setContent('  Joining...');
+      screen.render();
+
+      try {
+        await sharing.joinLeaderboard(username, email);
+        box.destroy();
+        activeOverlay = null;
+        showLeaderboardSuccess(username);
+      } catch (err) {
+        status.setContent(`  Error: ${err.message}`);
+        screen.render();
+        prompt.focus();
+      }
+    });
+
+    prompt.on('cancel', () => {
+      box.destroy();
+      activeOverlay = null;
+      screen.render();
+    });
+  }
+
+  function showLeaderboardSuccess(username) {
+    const box = createOverlay('Leaderboard', 9);
+    box.setContent(
+      `\n  {green-fg}✓{/green-fg} You're on the board!\n` +
+      `    @${username}\n` +
+      `    Opted In {green-fg}✓{/green-fg}\n\n` +
+      `  Press {bold}Enter{/bold} to view leaderboard`
+    );
+    box.focus();
+    screen.render();
+
+    box.key(['enter'], () => {
+      box.destroy();
+      activeOverlay = null;
+      showLeaderboardView();
+    });
+  }
+
+  function showLeaderboardView() {
+    const MODELS = ['opus', 'sonnet', 'haiku'];
+    let currentModel = 0;
+    let currentDate = new Date().toISOString().slice(0, 10);
+    let leaderboardData = null;
+    let loading = true;
+    let errorMsg = null;
+
+    const box = createOverlay('Leaderboard', '80%');
+    box.focus();
+
+    function renderBoard() {
+      const modelTabs = MODELS.map((m, i) =>
+        i === currentModel ? `{bold}{underline}${m.charAt(0).toUpperCase() + m.slice(1)}{/underline}{/bold}` : m.charAt(0).toUpperCase() + m.slice(1)
+      ).join(' │ ');
+
+      let content = `  ${modelTabs}     ${currentDate}\n\n`;
+
+      if (loading) {
+        content += '  Loading...';
+      } else if (errorMsg) {
+        content += `  {red-fg}${errorMsg}{/red-fg}`;
+      } else if (!leaderboardData || !leaderboardData.entries || leaderboardData.entries.length === 0) {
+        content += '  No entries for this day.';
+      } else {
+        const myUsername = sharing.getLeaderboardUsername();
+        for (const entry of leaderboardData.entries) {
+          const rank = String(entry.rank).padStart(3);
+          const name = entry.username.padEnd(18);
+          const tokens = String(entry.tokens).replace(/\B(?=(\d{3})+(?!\d))/g, ',').padStart(10);
+          const isMe = myUsername && entry.username.toLowerCase() === myUsername.toLowerCase();
+          const suffix = isMe ? ' ← you' : '';
+          const badge = entry.optedIn ? '{green-fg}✓{/green-fg}' : ' ';
+          content += `  ${rank}. ${name} ${tokens}  ${badge}${suffix}\n`;
+        }
+      }
+
+      content += '\n  {bold}[←/→]{/bold} Day  {bold}[m]{/bold} Model  {bold}[Esc]{/bold} Close';
+
+      box.setContent(content);
+      screen.render();
+    }
+
+    async function fetchData() {
+      loading = true;
+      errorMsg = null;
+      renderBoard();
+
+      try {
+        leaderboardData = await sharing.getLeaderboard(currentDate, MODELS[currentModel], 50);
+      } catch (err) {
+        errorMsg = `Leaderboard unavailable: ${err.message}`;
+        leaderboardData = null;
+      }
+      loading = false;
+      renderBoard();
+    }
+
+    box.key(['m'], () => {
+      currentModel = (currentModel + 1) % MODELS.length;
+      fetchData();
+    });
+
+    box.key(['left'], () => {
+      const d = new Date(currentDate + 'T12:00:00');
+      d.setDate(d.getDate() - 1);
+      currentDate = d.toISOString().slice(0, 10);
+      fetchData();
+    });
+
+    box.key(['right'], () => {
+      const today = new Date().toISOString().slice(0, 10);
+      if (currentDate >= today) return;
+      const d = new Date(currentDate + 'T12:00:00');
+      d.setDate(d.getDate() + 1);
+      currentDate = d.toISOString().slice(0, 10);
+      fetchData();
+    });
+
+    fetchData();
   }
 
   // 60-second timer to update "resets in" time on pinned label

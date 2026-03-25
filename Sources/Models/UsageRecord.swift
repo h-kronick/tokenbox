@@ -90,6 +90,16 @@ struct CloudFriend: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+/// A leaderboard entry from the public daily rankings
+struct LeaderboardEntry: Codable, Identifiable {
+    let rank: Int
+    let username: String
+    let tokens: Int
+    let optedIn: Bool
+    var isMe: Bool = false
+    var id: String { username }
+}
+
 /// live.json event from status-relay hook
 struct LiveEvent: Codable, Equatable, Sendable {
     let ts: String

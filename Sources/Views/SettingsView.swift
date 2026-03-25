@@ -373,6 +373,9 @@ struct SharingTab: View {
                         }
                     }
                 }
+
+                LeaderboardSettingsSection()
+                    .environmentObject(sharingManager)
             }
 
             if let error = sharingManager.lastError {
@@ -432,6 +435,182 @@ struct SharingTab: View {
         let rel = RelativeDateTimeFormatter()
         rel.unitsStyle = .abbreviated
         return rel.localizedString(for: date, relativeTo: Date())
+    }
+}
+
+// MARK: - Leaderboard Settings Section
+
+struct LeaderboardSettingsSection: View {
+    @EnvironmentObject var sharingManager: SharingManager
+    @State private var leaderboardUsernameInput = ""
+    @State private var leaderboardEmailInput = ""
+    @State private var isEditingLeaderboardUsername = false
+    @State private var editedLeaderboardUsername = ""
+    @State private var leaderboardError = ""
+    @State private var justJoinedLeaderboard = false
+
+    private var isUsernameValid: Bool {
+        let t = leaderboardUsernameInput.trimmingCharacters(in: .whitespaces)
+        return t.count >= 3 && t.count <= 15 && t.range(of: "^[a-zA-Z0-9_]+$", options: .regularExpression) != nil
+    }
+
+    private var isEmailValid: Bool {
+        let t = leaderboardEmailInput.trimmingCharacters(in: .whitespaces)
+        return t.contains("@") && t.contains(".")
+    }
+
+    var body: some View {
+        if sharingManager.isRegistered {
+            Section("Leaderboard") {
+                if !sharingManager.sharingEnabled {
+                    Text("Enable sharing first to join the leaderboard")
+                        .foregroundColor(.secondary)
+                } else if justJoinedLeaderboard {
+                    // Brief success state
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("✓ You're on the board!")
+                            .fontWeight(.medium)
+                        Text("@\(sharingManager.leaderboardUsername)")
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundColor(.secondary)
+                    }
+                    .onAppear {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            justJoinedLeaderboard = false
+                        }
+                    }
+                } else if sharingManager.leaderboardOptIn {
+                    // After joining — show status + edit/leave
+                    if isEditingLeaderboardUsername {
+                        HStack {
+                            Text("Username:")
+                                .foregroundColor(.secondary)
+                            TextField("3-15 chars", text: $editedLeaderboardUsername)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 150)
+                            Button("Save") {
+                                saveLeaderboardUsername()
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                            .disabled(editedLeaderboardUsername.trimmingCharacters(in: .whitespaces).count < 3)
+                            Button("Cancel") {
+                                isEditingLeaderboardUsername = false
+                                leaderboardError = ""
+                            }
+                            .controlSize(.small)
+                        }
+                    } else {
+                        HStack {
+                            Text("Username:")
+                                .foregroundColor(.secondary)
+                            Text(sharingManager.leaderboardUsername)
+                                .font(.system(.body, design: .monospaced))
+                                .fontWeight(.medium)
+                            Button {
+                                editedLeaderboardUsername = sharingManager.leaderboardUsername
+                                leaderboardError = ""
+                                isEditingLeaderboardUsername = true
+                            } label: {
+                                Image(systemName: "pencil")
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+
+                    HStack {
+                        Text("Status:")
+                            .foregroundColor(.secondary)
+                        Text("Opted In ✓")
+                            .foregroundColor(.green)
+                    }
+
+                    if !leaderboardError.isEmpty {
+                        Text(leaderboardError)
+                            .foregroundColor(.red)
+                            .font(.caption)
+                    }
+
+                    Button("Leave Leaderboard") {
+                        Task {
+                            await sharingManager.leaveLeaderboard()
+                        }
+                    }
+                    .foregroundColor(.red)
+                    .buttonStyle(.plain)
+                } else {
+                    // Before joining — show form
+                    Text("Join the public daily leaderboard. Only your username and daily output token count are visible. All other Claude data stays private.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    HStack {
+                        Text("Username:")
+                            .foregroundColor(.secondary)
+                        TextField("3-15 chars", text: $leaderboardUsernameInput)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 150)
+                    }
+                    Text("Username is public, 3-15 chars")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+
+                    HStack {
+                        Text("Email:")
+                            .foregroundColor(.secondary)
+                        TextField("you@example.com", text: $leaderboardEmailInput)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 200)
+                    }
+                    Text("Email is private, never displayed")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+
+                    if !leaderboardError.isEmpty {
+                        Text(leaderboardError)
+                            .foregroundColor(.red)
+                            .font(.caption)
+                    }
+
+                    Button("Join Leaderboard") {
+                        leaderboardError = ""
+                        Task {
+                            await sharingManager.joinLeaderboard(
+                                username: leaderboardUsernameInput,
+                                email: leaderboardEmailInput
+                            )
+                            if sharingManager.leaderboardOptIn {
+                                justJoinedLeaderboard = true
+                                leaderboardUsernameInput = ""
+                                leaderboardEmailInput = ""
+                            } else if let error = sharingManager.lastError {
+                                leaderboardError = error
+                            }
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!isUsernameValid || !isEmailValid)
+                }
+            }
+        }
+    }
+
+    private func saveLeaderboardUsername() {
+        let name = editedLeaderboardUsername.trimmingCharacters(in: .whitespaces)
+        guard name.count >= 3, name.count <= 15,
+              name.range(of: "^[a-zA-Z0-9_]+$", options: .regularExpression) != nil else {
+            leaderboardError = "Username must be 3-15 characters (letters, numbers, underscore)"
+            return
+        }
+        leaderboardError = ""
+        Task {
+            await sharingManager.updateLeaderboardUsername(name)
+            if sharingManager.lastError == nil {
+                isEditingLeaderboardUsername = false
+            } else {
+                leaderboardError = sharingManager.lastError ?? ""
+            }
+        }
     }
 }
 

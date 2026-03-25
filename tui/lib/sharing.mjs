@@ -220,6 +220,12 @@ export class SharingManager extends EventEmitter {
     const tokens = this._data.getTokens();
     const today = _localTodayStr();
 
+    // Populate per-model breakdown for all periods (matches macOS buildModelMap)
+    const tokensByModel = this._data.getTokensByModel('today');
+    const weekByModel = this._data.getTokensByModel('week');
+    const monthByModel = this._data.getTokensByModel('month');
+    const allTimeByModel = this._data.getTokensByModel('allTime');
+
     try {
       const res = await fetch(`${API_BASE}/push`, {
         method: 'POST',
@@ -231,7 +237,10 @@ export class SharingManager extends EventEmitter {
           shareCode: code,
           todayTokens: tokens.today,
           todayDate: today,
-          tokensByModel: {},
+          tokensByModel,
+          weekByModel,
+          monthByModel,
+          allTimeByModel,
         }),
       });
 
@@ -243,6 +252,92 @@ export class SharingManager extends EventEmitter {
     } catch {
       // Network errors are silent
     }
+  }
+
+  // --- Leaderboard methods ---
+
+  isLeaderboardOptIn() {
+    try { return getConfig('leaderboardOptIn') === 'true'; } catch { return false; }
+  }
+
+  getLeaderboardUsername() {
+    try { return getConfig('leaderboardUsername'); } catch { return null; }
+  }
+
+  async joinLeaderboard(username, email) {
+    const code = this.getShareCode();
+    const token = this._getSecretToken();
+    if (!code || !token) throw new Error('Not registered for sharing');
+
+    const res = await fetch(`${API_BASE}/leaderboard/join`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ shareCode: code, username, email }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Failed: ${res.status}`);
+    }
+
+    const data = await res.json();
+    setConfig('leaderboardOptIn', 'true');
+    setConfig('leaderboardUsername', data.username || username);
+    if (email) setConfig('leaderboardEmail', email);
+    return data;
+  }
+
+  async leaveLeaderboard() {
+    const code = this.getShareCode();
+    const token = this._getSecretToken();
+    if (!code || !token) throw new Error('Not registered for sharing');
+
+    const res = await fetch(`${API_BASE}/leaderboard/leave`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ shareCode: code }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Failed: ${res.status}`);
+    }
+
+    setConfig('leaderboardOptIn', 'false');
+    setConfig('leaderboardUsername', '');
+    setConfig('leaderboardEmail', '');
+  }
+
+  async getLeaderboard(date, model, limit) {
+    const params = new URLSearchParams();
+    if (date) params.set('date', date);
+    if (model) params.set('model', model);
+    if (limit) params.set('limit', String(limit));
+
+    const res = await fetch(`${API_BASE}/leaderboard?${params}`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Failed: ${res.status}`);
+    }
+    return res.json();
+  }
+
+  async getLeaderboardHistory(username, days) {
+    const params = new URLSearchParams();
+    if (days) params.set('days', String(days));
+
+    const res = await fetch(`${API_BASE}/leaderboard/history/${encodeURIComponent(username)}?${params}`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Failed: ${res.status}`);
+    }
+    return res.json();
   }
 
   async _fetchFriend(code) {
@@ -291,6 +386,20 @@ export class SharingManager extends EventEmitter {
     }
     if (displayName) {
       try { setConfig('displayName', displayName); } catch {}
+    }
+
+    // Seed leaderboard state from UserDefaults
+    const lbOptIn = _readMacDefault('leaderboardOptIn');
+    const lbUsername = _readMacDefault('leaderboardUsername');
+    const lbEmail = _readMacDefault('leaderboardEmail');
+    if (lbOptIn && !getConfig('leaderboardOptIn')) {
+      try { setConfig('leaderboardOptIn', lbOptIn === '1' || lbOptIn === 'true' ? 'true' : 'false'); } catch {}
+    }
+    if (lbUsername && !getConfig('leaderboardUsername')) {
+      try { setConfig('leaderboardUsername', lbUsername); } catch {}
+    }
+    if (lbEmail && !getConfig('leaderboardEmail')) {
+      try { setConfig('leaderboardEmail', lbEmail); } catch {}
     }
 
     // Read friends from UserDefaults

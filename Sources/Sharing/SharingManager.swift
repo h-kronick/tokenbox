@@ -14,6 +14,9 @@ final class SharingManager: ObservableObject {
     @Published var myShareURL: String = ""
     @Published var isRegistered: Bool = false
     @Published var lastError: String? = nil
+    @Published var leaderboardOptIn: Bool = false
+    @Published var leaderboardUsername: String = ""
+    @Published var leaderboardEntries: [LeaderboardEntry] = []
 
     private var friendsJSON: String {
         get { UserDefaults.standard.string(forKey: "friendsJSON") ?? "[]" }
@@ -27,6 +30,7 @@ final class SharingManager: ObservableObject {
     private var lastPushedTokens: Int = 0
     private var lastPushTime: Date = .distantPast
     private let secretTokenKey = "sharingSecretToken"
+    private let leaderboardEmailKey = "leaderboardEmail"
 
     private static let dayFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -39,6 +43,8 @@ final class SharingManager: ObservableObject {
         sharingEnabled = defaults.bool(forKey: "sharingEnabled")
         myDisplayName = defaults.string(forKey: "myDisplayName") ?? ""
         myShareCode = defaults.string(forKey: "myShareCode") ?? ""
+        leaderboardOptIn = defaults.bool(forKey: "leaderboardOptIn")
+        leaderboardUsername = defaults.string(forKey: "leaderboardUsername") ?? ""
         loadFriends()
 
         // Persist @Published changes to UserDefaults via Combine
@@ -53,6 +59,14 @@ final class SharingManager: ObservableObject {
         $myShareCode
             .dropFirst()
             .sink { UserDefaults.standard.set($0, forKey: "myShareCode") }
+            .store(in: &persistCancellables)
+        $leaderboardOptIn
+            .dropFirst()
+            .sink { UserDefaults.standard.set($0, forKey: "leaderboardOptIn") }
+            .store(in: &persistCancellables)
+        $leaderboardUsername
+            .dropFirst()
+            .sink { UserDefaults.standard.set($0, forKey: "leaderboardUsername") }
             .store(in: &persistCancellables)
     }
 
@@ -211,6 +225,7 @@ final class SharingManager: ObservableObject {
                 Task {
                     await self.periodicPushHandler?()
                     await self.fetchAllFriends()
+                    await self.fetchLeaderboard()
                 }
             }
     }
@@ -309,6 +324,117 @@ final class SharingManager: ObservableObject {
             }
         }
         saveFriends()
+    }
+
+    // MARK: - Leaderboard
+
+    /// Validate a leaderboard username: 3-15 chars, alphanumeric + underscore.
+    private static func isValidUsername(_ name: String) -> Bool {
+        let pattern = "^[a-zA-Z0-9_]+$"
+        return name.count >= 3 && name.count <= 15 && name.range(of: pattern, options: .regularExpression) != nil
+    }
+
+    /// Join the public daily leaderboard. Requires active sharing registration.
+    func joinLeaderboard(username: String, email: String) async {
+        guard isRegistered, sharingEnabled else {
+            lastError = "Enable sharing first to join the leaderboard"
+            return
+        }
+
+        let trimmedUsername = username.trimmingCharacters(in: .whitespaces)
+        guard Self.isValidUsername(trimmedUsername) else {
+            lastError = "Username must be 3-15 characters (letters, numbers, underscore)"
+            return
+        }
+
+        let trimmedEmail = email.trimmingCharacters(in: .whitespaces).lowercased()
+        guard trimmedEmail.contains("@"), trimmedEmail.contains(".") else {
+            lastError = "Please enter a valid email address"
+            return
+        }
+
+        guard let token = getSecretToken() else {
+            lastError = "Secret token missing — please re-register by toggling sharing off and on"
+            return
+        }
+
+        do {
+            let response = try await client.joinLeaderboard(
+                shareCode: myShareCode,
+                secretToken: token,
+                username: trimmedUsername,
+                email: trimmedEmail
+            )
+            leaderboardOptIn = true
+            leaderboardUsername = response.username
+            UserDefaults.standard.set(trimmedEmail, forKey: leaderboardEmailKey)
+            lastError = nil
+            await fetchLeaderboard()
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    /// Leave the public leaderboard. Clears local state and frees the username.
+    func leaveLeaderboard() async {
+        guard let token = getSecretToken() else {
+            lastError = "Secret token missing"
+            return
+        }
+
+        do {
+            try await client.leaveLeaderboard(shareCode: myShareCode, secretToken: token)
+            leaderboardOptIn = false
+            leaderboardUsername = ""
+            UserDefaults.standard.removeObject(forKey: leaderboardEmailKey)
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    /// Update the leaderboard username. Must already be opted in.
+    func updateLeaderboardUsername(_ newUsername: String) async {
+        let trimmed = newUsername.trimmingCharacters(in: .whitespaces)
+        guard Self.isValidUsername(trimmed) else {
+            lastError = "Username must be 3-15 characters (letters, numbers, underscore)"
+            return
+        }
+
+        guard let token = getSecretToken() else {
+            lastError = "Secret token missing"
+            return
+        }
+
+        do {
+            try await client.updateLeaderboardUsername(
+                shareCode: myShareCode,
+                secretToken: token,
+                newUsername: trimmed
+            )
+            leaderboardUsername = trimmed
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    /// Fetch the public daily leaderboard. Marks own entry with isMe if opted in.
+    func fetchLeaderboard(model: String = "opus") async {
+        do {
+            let response = try await client.getLeaderboard(model: model)
+            var entries = response.entries
+            if leaderboardOptIn, !leaderboardUsername.isEmpty {
+                for i in entries.indices {
+                    if entries[i].username.lowercased() == leaderboardUsername.lowercased() {
+                        entries[i].isMe = true
+                    }
+                }
+            }
+            leaderboardEntries = entries
+        } catch {
+            // Silently keep stale entries on fetch failure
+        }
     }
 
     // MARK: - Persistence

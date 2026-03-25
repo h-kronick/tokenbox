@@ -99,6 +99,128 @@ actor CloudSharingClient {
         return try decoder.decode(PeekResponse.self, from: data)
     }
 
+    // MARK: - Leaderboard Endpoints
+
+    struct LeaderboardJoinResponse: Codable {
+        let ok: Bool
+        let username: String
+    }
+
+    struct LeaderboardResponse: Codable {
+        let date: String
+        let model: String
+        let entries: [LeaderboardEntry]
+    }
+
+    struct LeaderboardHistoryDay: Codable {
+        let date: String
+        let tokens: Int
+        let opusTokens: Int
+        let sonnetTokens: Int
+        let haikuTokens: Int
+    }
+
+    struct LeaderboardHistoryResponse: Codable {
+        let username: String
+        let history: [LeaderboardHistoryDay]
+    }
+
+    /// Join the public leaderboard. Requires active sharing (at least one push).
+    func joinLeaderboard(shareCode: String, secretToken: String, username: String, email: String) async throws -> LeaderboardJoinResponse {
+        guard let url = URL(string: "\(Self.baseURL)/leaderboard/join") else {
+            throw CloudSharingError.invalidURL(endpoint: "leaderboard/join")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(secretToken)", forHTTPHeaderField: "Authorization")
+
+        struct JoinBody: Encodable {
+            let shareCode: String
+            let username: String
+            let email: String
+        }
+        request.httpBody = try encoder.encode(JoinBody(shareCode: shareCode, username: username, email: email))
+
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response)
+        return try decoder.decode(LeaderboardJoinResponse.self, from: data)
+    }
+
+    /// Leave the public leaderboard. Frees the username for reuse.
+    func leaveLeaderboard(shareCode: String, secretToken: String) async throws {
+        guard let url = URL(string: "\(Self.baseURL)/leaderboard/leave") else {
+            throw CloudSharingError.invalidURL(endpoint: "leaderboard/leave")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(secretToken)", forHTTPHeaderField: "Authorization")
+
+        request.httpBody = try encoder.encode(["shareCode": shareCode])
+
+        let (_, response) = try await session.data(for: request)
+        try validateResponse(response)
+    }
+
+    /// Update leaderboard username. Must already be opted in.
+    func updateLeaderboardUsername(shareCode: String, secretToken: String, newUsername: String) async throws {
+        guard let url = URL(string: "\(Self.baseURL)/leaderboard/update-username") else {
+            throw CloudSharingError.invalidURL(endpoint: "leaderboard/update-username")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(secretToken)", forHTTPHeaderField: "Authorization")
+
+        struct UpdateBody: Encodable {
+            let shareCode: String
+            let username: String
+        }
+        request.httpBody = try encoder.encode(UpdateBody(shareCode: shareCode, username: newUsername))
+
+        let (_, response) = try await session.data(for: request)
+        try validateResponse(response)
+    }
+
+    /// Fetch the public daily leaderboard. No auth required.
+    func getLeaderboard(date: String? = nil, model: String = "opus", limit: Int = 50) async throws -> LeaderboardResponse {
+        var components = URLComponents(string: "\(Self.baseURL)/leaderboard")!
+        var queryItems: [URLQueryItem] = []
+        if let date { queryItems.append(URLQueryItem(name: "date", value: date)) }
+        queryItems.append(URLQueryItem(name: "model", value: model))
+        queryItems.append(URLQueryItem(name: "limit", value: String(limit)))
+        components.queryItems = queryItems
+
+        guard let url = components.url else {
+            throw CloudSharingError.invalidURL(endpoint: "leaderboard")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response)
+        return try decoder.decode(LeaderboardResponse.self, from: data)
+    }
+
+    /// Fetch daily token history for a leaderboard user. No auth required.
+    func getLeaderboardHistory(username: String, days: Int = 30) async throws -> LeaderboardHistoryResponse {
+        var components = URLComponents(string: "\(Self.baseURL)/leaderboard/history/\(username)")!
+        components.queryItems = [URLQueryItem(name: "days", value: String(days))]
+
+        guard let url = components.url else {
+            throw CloudSharingError.invalidURL(endpoint: "leaderboard/history")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response)
+        return try decoder.decode(LeaderboardHistoryResponse.self, from: data)
+    }
+
     // MARK: - Helpers
 
     private func validateResponse(_ response: URLResponse) throws {

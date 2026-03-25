@@ -257,6 +257,68 @@ export class DataManager extends EventEmitter {
   }
 
   /**
+   * Get output tokens grouped by model for a given period.
+   * Returns { opus: N, sonnet: N, haiku: N } with short model name keys
+   * matching the macOS app's buildModelMap pattern.
+   */
+  getTokensByModel(period) {
+    if (!this._db) return {};
+
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfTomorrow = new Date(startOfToday.getTime() + 86400000);
+
+    let from, to;
+    switch (period) {
+      case 'today':
+        from = startOfToday.toISOString();
+        to = startOfTomorrow.toISOString();
+        break;
+      case 'week': {
+        const dow = startOfToday.getDay();
+        const weekStart = new Date(startOfToday.getTime() - ((dow === 0 ? 6 : dow - 1)) * 86400000);
+        from = weekStart.toISOString();
+        to = now.toISOString();
+        break;
+      }
+      case 'month':
+        from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        to = now.toISOString();
+        break;
+      case 'allTime':
+        from = null;
+        to = null;
+        break;
+      default:
+        from = startOfToday.toISOString();
+        to = startOfTomorrow.toISOString();
+    }
+
+    try {
+      let sql = `SELECT model, SUM(output_tokens) as tokens FROM token_events WHERE 1=1`;
+      const params = [];
+      if (from) { sql += ` AND timestamp >= ?`; params.push(from); }
+      if (to) { sql += ` AND timestamp <= ?`; params.push(to); }
+      sql += ` GROUP BY model`;
+
+      const rows = this._db.prepare(sql).all(...params);
+      const result = {};
+      for (const row of rows) {
+        const m = (row.model || '').toLowerCase();
+        let key;
+        if (m.includes('opus')) key = 'opus';
+        else if (m.includes('sonnet')) key = 'sonnet';
+        else if (m.includes('haiku')) key = 'haiku';
+        else key = row.model;
+        result[key] = (result[key] || 0) + (row.tokens || 0);
+      }
+      return result;
+    } catch {
+      return {};
+    }
+  }
+
+  /**
    * Force a full data refresh from the database.
    */
   refresh() {
