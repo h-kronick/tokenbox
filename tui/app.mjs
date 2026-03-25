@@ -68,8 +68,8 @@ export async function main(overrides = {}) {
   });
 
   data.on('live-update', (liveData) => {
-    if (s.realtimeFlip && liveData.out) {
-      data.addRealtimeDelta(liveData.out);
+    if (s.realtimeFlip) {
+      data.handleLiveOutput(liveData.out || 0, liveData.sid || '');
     }
   });
 

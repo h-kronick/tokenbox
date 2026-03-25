@@ -1,12 +1,13 @@
-// Data pipeline — watches live.json for real-time updates, queries SQLite for aggregates,
-// manages context rotation (friends or period cycling).
+// Data pipeline — watches live.json for real-time updates, watches JSONL session logs
+// for DB population, queries SQLite for aggregates, manages context rotation.
 
 import { EventEmitter } from 'node:events';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
-import { readFileSync } from 'node:fs';
+import { join, basename, dirname } from 'node:path';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import chokidar from 'chokidar';
 import { getDb, closeDb } from '../../skill/lib/db.mjs';
+import { parseLine } from '../../skill/lib/jsonl-parser.mjs';
 import { formatTokens, formatModelName, timeUntilReset, timeAgo } from './formatting.mjs';
 
 const CONTEXT_ROTATION_MS = 15_000;
@@ -27,6 +28,7 @@ export class DataManager extends EventEmitter {
   constructor() {
     super();
     this._watcher = null;
+    this._jsonlWatcher = null;
     this._rotationTimer = null;
     this._modelFilter = 'opus';
     this._pinnedPeriod = 'today';
@@ -36,6 +38,13 @@ export class DataManager extends EventEmitter {
     this._contextIndex = 0;
     this._db = null;
     this._dataDir = getDataDir();
+    // JSONL watcher state — tracks byte offsets per file for incremental parsing
+    this._fileOffsets = new Map();
+    this._initialScanComplete = false;
+    // Live event delta tracking — tracks cumulative output per session to compute deltas
+    this._lastLiveOut = 0;
+    this._lastLiveSid = null;
+    this._firstLiveEvent = true;
   }
 
   start(modelFilter, pinnedPeriod) {
@@ -50,8 +59,13 @@ export class DataManager extends EventEmitter {
       // DB may not exist yet — that's OK, we'll work with zeros
     }
 
+    // Backfill DB from Claude Code JSONL session logs before first refresh.
+    // Mirrors macOS native app's JSONLWatcher initial scan.
+    this._scanJSONLFiles();
+
     this._refreshTokens();
     this._startWatcher();
+    this._startJSONLWatcher();
     this._startContextRotation();
   }
 
@@ -59,6 +73,10 @@ export class DataManager extends EventEmitter {
     if (this._watcher) {
       this._watcher.close();
       this._watcher = null;
+    }
+    if (this._jsonlWatcher) {
+      this._jsonlWatcher.close();
+      this._jsonlWatcher = null;
     }
     if (this._rotationTimer) {
       clearInterval(this._rotationTimer);
@@ -81,6 +99,9 @@ export class DataManager extends EventEmitter {
   setModelFilter(f) {
     this._modelFilter = f;
     this._realtimeDelta = 0;
+    // Reset live tracking — cumulative values are model-agnostic but delta
+    // should restart when the user switches models to avoid stale cross-model deltas
+    this._firstLiveEvent = true;
     this._refreshTokens();
   }
 
@@ -96,16 +117,41 @@ export class DataManager extends EventEmitter {
     this._emitContextChange();
   }
 
-  addRealtimeDelta(n) {
-    this._realtimeDelta += n;
-    // Update all periods with the delta
-    const val = this._tokens[this._pinnedPeriod] + (this._pinnedPeriod === 'today' ? this._realtimeDelta : 0);
-    this.emit('pinned-change', {
-      label: PERIOD_LABELS[this._pinnedPeriod],
-      value: val,
-      modelName: formatModelName(this._modelFilter),
-      resetTime: timeUntilReset(),
-    });
+  /**
+   * Handle a live output event — computes the actual delta from cumulative values.
+   * live.json's `out` field is cumulative output tokens per context window, not a
+   * per-message delta. We track the previous value per session to compute the real
+   * increment. On first event after startup or session change, delta is 0 since the
+   * JSONL watcher + DB refresh will account for existing tokens.
+   * @param {number} outValue - Cumulative output tokens from live.json
+   * @param {string} sessionId - Session ID from live.json
+   */
+  handleLiveOutput(outValue, sessionId) {
+    let delta = 0;
+
+    if (this._firstLiveEvent) {
+      // First event after startup — DB was just backfilled from JSONL scan,
+      // so these tokens are already counted. Skip to avoid double-counting.
+      this._firstLiveEvent = false;
+    } else if (sessionId && sessionId === this._lastLiveSid) {
+      // Same session — delta is the increase in cumulative output
+      delta = Math.max(0, outValue - this._lastLiveOut);
+    }
+    // New/different session: delta = 0, let JSONL import + DB refresh handle it
+
+    this._lastLiveSid = sessionId || null;
+    this._lastLiveOut = outValue;
+
+    if (delta > 0) {
+      this._realtimeDelta += delta;
+      const val = this._tokens[this._pinnedPeriod] + (this._pinnedPeriod === 'today' ? this._realtimeDelta : 0);
+      this.emit('pinned-change', {
+        label: PERIOD_LABELS[this._pinnedPeriod],
+        value: val,
+        modelName: formatModelName(this._modelFilter),
+        resetTime: timeUntilReset(),
+      });
+    }
   }
 
   setFriends(friends) {
@@ -130,7 +176,11 @@ export class DataManager extends EventEmitter {
         const raw = readFileSync(livePath, 'utf8');
         const data = JSON.parse(raw);
 
-        // Apply model filter — substring match
+        // Always trigger debounced DB refresh — the JSONL watcher may have inserted
+        // events for any model, and we need the DB totals to stay current.
+        this._debouncedRefresh();
+
+        // Apply model filter — substring match (only for display/delta, not DB refresh)
         if (this._modelFilter && this._modelFilter !== 'all') {
           if (!data.model || !data.model.toLowerCase().includes(this._modelFilter.toLowerCase())) {
             return;
@@ -138,13 +188,124 @@ export class DataManager extends EventEmitter {
         }
 
         this.emit('live-update', data);
-
-        // Debounced DB refresh — matches macOS app's 500ms debounce on JSONL changes
-        this._debouncedRefresh();
       } catch {
         // Ignore read/parse errors (atomic write race)
       }
     });
+  }
+
+  // --- JSONL session log watcher (mirrors macOS JSONLWatcher.swift) ---
+
+  /**
+   * Scan all existing JSONL files on startup for DB backfill.
+   * Processes files synchronously so the first _refreshTokens() has accurate data.
+   */
+  _scanJSONLFiles() {
+    if (!this._db) return;
+
+    const claudeProjectsDir = join(homedir(), '.claude', 'projects');
+    if (!existsSync(claudeProjectsDir)) return;
+
+    try {
+      const projects = readdirSync(claudeProjectsDir);
+      for (const project of projects) {
+        const projectDir = join(claudeProjectsDir, project);
+        let entries;
+        try {
+          entries = readdirSync(projectDir);
+        } catch { continue; }
+        for (const entry of entries) {
+          if (entry.endsWith('.jsonl')) {
+            this._processJSONLFile(join(projectDir, entry));
+          }
+        }
+      }
+    } catch {
+      // ~/.claude/projects/ not readable — skip
+    }
+    this._initialScanComplete = true;
+  }
+
+  /**
+   * Start watching ~/.claude/projects/ for JSONL file changes.
+   * Uses chokidar (FSEvents on macOS, inotify on Linux, polling fallback).
+   */
+  _startJSONLWatcher() {
+    const claudeProjectsDir = join(homedir(), '.claude', 'projects');
+
+    // Don't crash if the directory doesn't exist yet — Claude Code creates it on first use
+    if (!existsSync(claudeProjectsDir)) return;
+
+    this._jsonlWatcher = chokidar.watch(join(claudeProjectsDir, '**', '*.jsonl'), {
+      persistent: true,
+      ignoreInitial: true,
+      awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 },
+      // Limit depth to avoid watching deeply nested directories
+      depth: 2,
+    });
+
+    this._jsonlWatcher.on('change', (filePath) => {
+      this._processJSONLFile(filePath);
+      this._debouncedRefresh();
+    });
+
+    this._jsonlWatcher.on('add', (filePath) => {
+      this._processJSONLFile(filePath);
+      this._debouncedRefresh();
+    });
+
+    // Silently handle watcher errors (permissions, too many watchers, etc.)
+    this._jsonlWatcher.on('error', () => {});
+  }
+
+  /**
+   * Process a single JSONL file — read new content from last known byte offset,
+   * parse lines, and insert completed events into SQLite.
+   * @param {string} filePath - Absolute path to the .jsonl file
+   */
+  _processJSONLFile(filePath) {
+    if (!this._db) return;
+
+    const offset = this._fileOffsets.get(filePath) || 0;
+    let buf;
+    try {
+      buf = readFileSync(filePath);
+    } catch { return; }
+
+    // Handle file truncation (shouldn't happen, but be safe)
+    if (buf.length < offset) {
+      this._fileOffsets.set(filePath, 0);
+      return this._processJSONLFile(filePath);
+    }
+    if (buf.length <= offset) return;
+
+    const newContent = buf.slice(offset).toString('utf8');
+    this._fileOffsets.set(filePath, buf.length);
+
+    const sessionId = basename(filePath, '.jsonl');
+    const project = basename(dirname(filePath));
+
+    const insertStmt = this._db.prepare(`
+      INSERT OR IGNORE INTO token_events
+        (timestamp, source, session_id, project, model, input_tokens, output_tokens, cache_create, cache_read, cost_usd)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    for (const line of newContent.split('\n')) {
+      const event = parseLine(line, sessionId, project);
+      if (event) {
+        try {
+          insertStmt.run(
+            event.timestamp, event.source, event.session_id,
+            event.project, event.model, event.input_tokens,
+            event.output_tokens, event.cache_create, event.cache_read,
+            event.cost_usd ?? null
+          );
+        } catch {
+          // Ignore dedup conflicts and other insert errors
+        }
+      }
+    }
   }
 
   _debouncedRefresh() {
