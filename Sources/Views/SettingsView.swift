@@ -543,28 +543,35 @@ struct LeaderboardSettingsSection: View {
                     Text("Join the public daily leaderboard. Only your username and daily output token count are visible. All other Claude data stays private.")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .padding(.bottom, 4)
 
-                    HStack {
-                        Text("Username:")
-                            .foregroundColor(.secondary)
-                        TextField("3-15 chars", text: $leaderboardUsernameInput)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 150)
-                    }
-                    Text("Username is public, 3-15 chars")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Username")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            TextField("pick_a_username", text: $leaderboardUsernameInput)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(maxWidth: 220)
+                            if !leaderboardUsernameInput.isEmpty && !isUsernameValid {
+                                Text("3-15 characters: letters, numbers, underscore")
+                                    .font(.caption2)
+                                    .foregroundColor(.red)
+                            }
+                        }
 
-                    HStack {
-                        Text("Email:")
-                            .foregroundColor(.secondary)
-                        TextField("you@example.com", text: $leaderboardEmailInput)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 200)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Email")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            TextField("you@example.com", text: $leaderboardEmailInput)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(maxWidth: 220)
+                            Text("Private — never displayed publicly")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
                     }
-                    Text("Email is private, never displayed")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
 
                     if !leaderboardError.isEmpty {
                         Text(leaderboardError)
