@@ -396,34 +396,75 @@ struct SharingTab: View {
                     }
 
                     if let code = sharingManager.activeLinkCode {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(code)
-                                .font(.system(.body, design: .monospaced))
-                                .textSelection(.enabled)
-                                .padding(6)
-                                .background(Color(nsColor: .controlBackgroundColor))
-                                .cornerRadius(4)
-                            HStack {
-                                Button("Copy") {
-                                    NSPasteboard.general.clearContents()
-                                    NSPasteboard.general.setString(code, forType: .string)
-                                }
-                                .controlSize(.small)
-                                Text("Expires in 15 minutes")
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("On your other device:")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("1. Install TokenBox if needed:")
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
+                                HStack(spacing: 4) {
+                                    Text("curl -fsSL https://tokenbox.club/install | bash")
+                                        .font(.system(.caption2, design: .monospaced))
+                                        .textSelection(.enabled)
+                                        .padding(4)
+                                        .background(Color(nsColor: .controlBackgroundColor))
+                                        .cornerRadius(3)
+                                    Button {
+                                        NSPasteboard.general.clearContents()
+                                        NSPasteboard.general.setString("curl -fsSL https://tokenbox.club/install | bash", forType: .string)
+                                    } label: {
+                                        Image(systemName: "doc.on.doc")
+                                            .font(.system(size: 9))
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help("Copy install command")
+                                }
                             }
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("2. Open Settings \u{2192} Sharing \u{2192} \"Link to Existing Device\" and paste:")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                HStack(spacing: 4) {
+                                    Text(code)
+                                        .font(.system(.caption, design: .monospaced))
+                                        .textSelection(.enabled)
+                                        .padding(4)
+                                        .background(Color(nsColor: .controlBackgroundColor))
+                                        .cornerRadius(3)
+                                    Button("Copy") {
+                                        NSPasteboard.general.clearContents()
+                                        NSPasteboard.general.setString(code, forType: .string)
+                                    }
+                                    .controlSize(.mini)
+                                }
+                                Text("Or run:  tokenbox link \(code)")
+                                    .font(.system(.caption2, design: .monospaced))
+                                    .foregroundColor(.secondary)
+                                    .textSelection(.enabled)
+                            }
+
+                            Text("Expires in 15 minutes. Single use.")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
                         }
                     } else {
-                        Button("Link Another Device") {
-                            Task { await sharingManager.createLinkCode() }
-                        }
-                        .disabled(sharingManager.isGeneratingLink)
-                    }
+                        HStack {
+                            Button("Link Another Device") {
+                                Task { await sharingManager.createLinkCode() }
+                            }
+                            .disabled(sharingManager.isGeneratingLink)
+                            .controlSize(.small)
 
-                    Button("Link to Existing Device") {
-                        linkCodeInput = ""
-                        showLinkSheet = true
+                            Button("Link to Existing Device") {
+                                linkCodeInput = ""
+                                showLinkSheet = true
+                            }
+                            .controlSize(.small)
+                        }
                     }
                 }
 

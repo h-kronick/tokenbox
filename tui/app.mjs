@@ -392,13 +392,16 @@ export async function main(overrides = {}) {
       try {
         const linkCode = await sharing.createLinkCode();
         box.setContent(
-          '\n  {green-fg}✔{/green-fg} Link code generated:\n\n' +
-          `  {bold}${linkCode}{/bold}\n\n` +
-          '  Enter this on your other device within 15 minutes.\n' +
-          '  Run: {bold}tokenbox link ' + linkCode + '{/bold}\n\n' +
+          '\n  {green-fg}✔{/green-fg} {bold}Link code generated{/bold}\n\n' +
+          '  On your other device:\n\n' +
+          '  {bold}1.{/bold} Install TokenBox (if needed):\n' +
+          '     {yellow-fg}curl -fsSL https://tokenbox.club/install | bash{/yellow-fg}\n\n' +
+          '  {bold}2.{/bold} Link with this code:\n' +
+          `     {yellow-fg}tokenbox link ${linkCode}{/yellow-fg}\n\n` +
+          '  Expires in 15 minutes. Single use.\n\n' +
           '  {bold}[Esc]{/bold} Close'
         );
-        box.height = 12;
+        box.height = 16;
         screen.render();
       } catch (err) {
         box.setContent(`\n  {red-fg}✗ ${err.message}{/red-fg}\n\n  {bold}[Esc]{/bold} Close`);
