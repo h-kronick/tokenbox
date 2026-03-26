@@ -251,22 +251,6 @@ final class SharingManager: ObservableObject {
         pushTimer?.cancel()
         fetchTimer?.cancel()
 
-        // Immediate initial push + fetch on startup so aggregate data is available
-        // right away (otherwise the first push happens 30s after launch, leaving
-        // the display showing local-only tokens for linked-device users).
-        if isRegistered, sharingEnabled {
-            Task { [weak self] in
-                guard let self, !self.isSyncing else { return }
-                self.isSyncing = true
-                defer { self.isSyncing = false }
-                await self.periodicPushHandler?()
-                async let friendsFetch: () = self.fetchAllFriends()
-                async let leaderboardFetch: () = self.fetchLeaderboard(model: self.leaderboardModel)
-                _ = await (friendsFetch, leaderboardFetch)
-                self.syncFriendsFromLeaderboard()
-            }
-        }
-
         // Combined push + fetch every 30 seconds.
         // Push first (so the server has our latest data), then fetch friends
         // and leaderboard concurrently, then sync friends from leaderboard.

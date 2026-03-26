@@ -241,7 +241,8 @@ struct MainWindowView: View {
             }
             sharingManager.startTimers()
             refreshContext()
-            // Push latest tokens and fetch friends on launch
+            // Immediate push + fetch on launch so aggregate, friends, and leaderboard
+            // are available within seconds rather than waiting for the 30s timer.
             if sharingManager.sharingEnabled {
                 Task {
                     await sharingManager.pushMyTokens(
@@ -252,7 +253,9 @@ struct MainWindowView: View {
                         allTimeByModel: dataStore.allTimeByModel,
                         force: true
                     )
-                    await sharingManager.fetchAllFriends()
+                    async let friendsFetch: () = sharingManager.fetchAllFriends()
+                    async let leaderboardFetch: () = sharingManager.fetchLeaderboard(model: sharingManager.leaderboardModel)
+                    _ = await (friendsFetch, leaderboardFetch)
                     refreshContext()
                 }
             }
