@@ -10,9 +10,3 @@ skill/node_modules/
 *.o
 *.dylib
 .firebase/
-
-# Internal docs — kept locally, not published to public repo
-CLAUDE.md
-SPEC.md
-PHYSICAL-DEVICE.md
-WINDOWS-PORT.md
