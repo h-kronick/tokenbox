@@ -61,12 +61,14 @@ final class MenuBarState: ObservableObject {
         displayLabel = pinned
 
         let newTokens: Int
-        // Use server aggregate when devices are linked (matches main display behavior)
+        // Use server aggregate when devices are linked (matches main display behavior).
+        // Smooth interpolation: aggregate + (currentLocal - localAtSnapshot)
         if let sm = sharingManager, sm.hasServerAggregate,
            let aggTokens = sm.aggregateTokens(for: ds.modelFilter, period: pinned) {
             switch pinned {
             case "today":
-                newTokens = aggTokens + ds.realtimeDelta
+                let localGain = max(0, ds.realtimeDisplayTokens - sm.localTokensAtAggregateSnapshot)
+                newTokens = aggTokens + localGain
             default:
                 newTokens = aggTokens
             }

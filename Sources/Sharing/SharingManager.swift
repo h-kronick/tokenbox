@@ -23,6 +23,10 @@ final class SharingManager: ObservableObject {
     /// Server aggregate token data (combined across all linked devices).
     /// Only populated when devices are linked and server returns aggregate data.
     @Published var serverAggregate: CloudSharingClient.ServerAggregate?
+    /// Local token total (from SQLite) at the moment serverAggregate was last updated.
+    /// Used to compute smooth display: aggregate + (currentLocal - localAtSnapshot)
+    /// so that DB refreshes don't cause the display to jump backward.
+    var localTokensAtAggregateSnapshot: Int = 0
     /// The model the leaderboard panel is currently showing. Set by LeaderboardSidePanel
     /// so the periodic fetch uses the correct model tab.
     var leaderboardModel: String = "opus"
@@ -323,9 +327,12 @@ final class SharingManager: ObservableObject {
                 linkedDevices = devices
             }
 
-            // Store server aggregate for multi-device display
+            // Store server aggregate for multi-device display.
+            // Snapshot local todayTokens so display can smoothly interpolate:
+            // displayValue = aggregate + (currentLocal - localAtSnapshot)
             if let agg = pushResponse.serverAggregate {
                 serverAggregate = agg
+                localTokensAtAggregateSnapshot = todayTokens
                 NotificationCenter.default.post(name: .serverAggregateDidChange, object: nil)
             }
         } catch CloudSharingError.rateLimited {

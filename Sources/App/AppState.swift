@@ -167,16 +167,20 @@ final class AppState: ObservableObject {
     private func updatePinnedDisplay(dataStore: TokenDataStore?) {
         guard let store = dataStore else { return }
 
-        // When devices are linked and server aggregate is available, show combined total
-        // with real-time delta on top for "today" period responsiveness between pushes.
+        // When devices are linked and server aggregate is available, show combined total.
+        // Smooth interpolation: aggregate + (currentLocal - localAtSnapshot)
+        // This avoids choppy drops when realtimeDelta resets on DB refresh, because
+        // both currentLocal and localAtSnapshot are stable DB values that move together.
         if let sm = sharingManager, sm.hasServerAggregate {
             let period = pinnedDisplay == "today" || pinnedDisplay == "week" || pinnedDisplay == "month" || pinnedDisplay == "allTime" ? pinnedDisplay : "today"
             if let aggTokens = sm.aggregateTokens(for: store.modelFilter, period: period) {
                 switch period {
                 case "today":
                     pinnedLabel = "TODAY"
-                    let delta = realtimeFlipDisplay ? store.realtimeDelta : 0
-                    pinnedValue = formatTokens(aggTokens + delta)
+                    // Smooth: use local gain since last aggregate, not volatile realtimeDelta
+                    let currentLocal = realtimeFlipDisplay ? store.realtimeDisplayTokens : store.todayTokens
+                    let localGain = max(0, currentLocal - sm.localTokensAtAggregateSnapshot)
+                    pinnedValue = formatTokens(aggTokens + localGain)
                 case "week":
                     pinnedLabel = "WEEK"
                     pinnedValue = formatTokens(aggTokens)
@@ -188,8 +192,9 @@ final class AppState: ObservableObject {
                     pinnedValue = formatTokens(aggTokens)
                 default:
                     pinnedLabel = "TODAY"
-                    let delta = realtimeFlipDisplay ? store.realtimeDelta : 0
-                    pinnedValue = formatTokens(aggTokens + delta)
+                    let currentLocal = realtimeFlipDisplay ? store.realtimeDisplayTokens : store.todayTokens
+                    let localGain = max(0, currentLocal - sm.localTokensAtAggregateSnapshot)
+                    pinnedValue = formatTokens(aggTokens + localGain)
                 }
                 return
             }

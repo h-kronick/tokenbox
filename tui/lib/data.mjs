@@ -34,6 +34,8 @@ export class DataManager extends EventEmitter {
     this._pinnedPeriod = 'today';
     this._tokens = { today: 0, week: 0, month: 0, allTime: 0 };
     this._realtimeDelta = 0;
+    this._serverAggregate = null;
+    this._localTokensAtAggregateSnapshot = 0;
     this._friends = [];
     this._contextIndex = 0;
     this._db = null;
@@ -118,9 +120,14 @@ export class DataManager extends EventEmitter {
     this._contextIndex = 0;
     const aggValue = this._aggregateTokens(p);
     const localValue = this._tokens[p] + (p === 'today' ? this._realtimeDelta : 0);
-    const value = aggValue != null
-      ? aggValue + (p === 'today' ? this._realtimeDelta : 0)
-      : localValue;
+    let value;
+    if (aggValue != null && p === 'today') {
+      const currentLocal = this._tokens.today + this._realtimeDelta;
+      const localGain = Math.max(0, currentLocal - (this._localTokensAtAggregateSnapshot || 0));
+      value = aggValue + localGain;
+    } else {
+      value = aggValue != null ? aggValue : localValue;
+    }
     this.emit('pinned-change', {
       label: PERIOD_LABELS[p],
       value,
@@ -159,8 +166,15 @@ export class DataManager extends EventEmitter {
       this._realtimeDelta += delta;
       const aggValue = this._aggregateTokens(this._pinnedPeriod);
       const localBase = this._tokens[this._pinnedPeriod];
-      const base = aggValue != null ? aggValue : localBase;
-      const val = base + (this._pinnedPeriod === 'today' ? this._realtimeDelta : 0);
+      let val;
+      if (aggValue != null && this._pinnedPeriod === 'today') {
+        const currentLocal = this._tokens.today + this._realtimeDelta;
+        const localGain = Math.max(0, currentLocal - (this._localTokensAtAggregateSnapshot || 0));
+        val = aggValue + localGain;
+      } else {
+        const base = aggValue != null ? aggValue : localBase;
+        val = base + (this._pinnedPeriod === 'today' ? this._realtimeDelta : 0);
+      }
       this.emit('pinned-change', {
         label: PERIOD_LABELS[this._pinnedPeriod],
         value: val,
@@ -181,6 +195,9 @@ export class DataManager extends EventEmitter {
 
   setServerAggregate(agg) {
     this._serverAggregate = agg || null;
+    // Snapshot local today tokens so display can smoothly interpolate:
+    // displayValue = aggregate + (currentLocal - localAtSnapshot)
+    this._localTokensAtAggregateSnapshot = this._tokens.today;
     this._refreshTokens();
   }
 
@@ -404,12 +421,19 @@ export class DataManager extends EventEmitter {
     this._tokens.month = this._queryOutputTokens(monthStartStr, nowStr, filter);
     this._tokens.allTime = this._queryOutputTokens(null, null, filter);
 
-    // Emit current pinned value — use server aggregate when linked devices exist
+    // Emit current pinned value — use server aggregate when linked devices exist.
+    // Smooth interpolation: aggregate + max(0, currentLocal - localAtSnapshot)
+    // avoids choppy drops when realtimeDelta resets on DB refresh.
     const aggValue = this._aggregateTokens(this._pinnedPeriod);
     const localValue = this._tokens[this._pinnedPeriod] + (this._pinnedPeriod === 'today' ? this._realtimeDelta : 0);
-    const pinnedVal = aggValue != null
-      ? aggValue + (this._pinnedPeriod === 'today' ? this._realtimeDelta : 0)
-      : localValue;
+    let pinnedVal;
+    if (aggValue != null && this._pinnedPeriod === 'today') {
+      const currentLocal = this._tokens.today + this._realtimeDelta;
+      const localGain = Math.max(0, currentLocal - (this._localTokensAtAggregateSnapshot || 0));
+      pinnedVal = aggValue + localGain;
+    } else {
+      pinnedVal = aggValue != null ? aggValue : localValue;
+    }
     this.emit('pinned-change', {
       label: PERIOD_LABELS[this._pinnedPeriod],
       value: pinnedVal,
