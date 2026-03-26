@@ -32,6 +32,7 @@ final class SharingManager: ObservableObject {
     private var persistCancellables: Set<AnyCancellable> = []
     private var lastPushedTokens: Int = 0
     private var lastPushTime: Date = .distantPast
+    private var isSyncing: Bool = false
     private let secretTokenKey = "sharingSecretToken"
     private let leaderboardEmailKey = "leaderboardEmail"
 
@@ -221,15 +222,20 @@ final class SharingManager: ObservableObject {
         pushTimer?.cancel()
         fetchTimer?.cancel()
 
-        // Combined push + fetch every 30 seconds
+        // Combined push + fetch every 30 seconds.
+        // Push first (so the server has our latest data), then fetch friends
+        // and leaderboard concurrently, then sync friends from leaderboard.
         pushTimer = Timer.publish(every: 30, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
-                guard let self else { return }
+                guard let self, !self.isSyncing else { return }
                 Task {
+                    self.isSyncing = true
+                    defer { self.isSyncing = false }
                     await self.periodicPushHandler?()
-                    await self.fetchAllFriends()
-                    await self.fetchLeaderboard(model: self.leaderboardModel)
+                    async let friendsFetch: () = self.fetchAllFriends()
+                    async let leaderboardFetch: () = self.fetchLeaderboard(model: self.leaderboardModel)
+                    _ = await (friendsFetch, leaderboardFetch)
                     self.syncFriendsFromLeaderboard()
                 }
             }
