@@ -11,9 +11,18 @@ actor CloudSharingClient {
         let shareURL: String
     }
 
+    struct ServerAggregate: Codable {
+        let todayTokens: Int?
+        let tokensByModel: [String: Int]?
+        let weekByModel: [String: Int]?
+        let monthByModel: [String: Int]?
+        let allTimeByModel: [String: Int]?
+    }
+
     struct PushResponse: Codable {
         let displayName: String?
         let devices: [LinkedDevice]?
+        let serverAggregate: ServerAggregate?
     }
 
     struct PeekResponse: Codable {
@@ -91,7 +100,7 @@ actor CloudSharingClient {
 
         let (data, response) = try await session.data(for: request)
         try validateResponse(response)
-        return (try? decoder.decode(PushResponse.self, from: data)) ?? PushResponse(displayName: nil, devices: nil)
+        return (try? decoder.decode(PushResponse.self, from: data)) ?? PushResponse(displayName: nil, devices: nil, serverAggregate: nil)
     }
 
     /// Peek at a friend's current token count by share code.

@@ -23,6 +23,7 @@ export class SharingManager extends EventEmitter {
     this._lastPushTime = 0;
     this._friends = []; // { code, displayName, nickname, tokens, todayDate }
     this._devices = []; // { deviceId, label, lastPush }
+    this._serverAggregate = null; // server-side aggregate across all linked devices
   }
 
   start() {
@@ -95,6 +96,10 @@ export class SharingManager extends EventEmitter {
 
   getDevices() {
     return this._devices;
+  }
+
+  getServerAggregate() {
+    return this._serverAggregate;
   }
 
   async createLinkCode() {
@@ -391,7 +396,7 @@ export class SharingManager extends EventEmitter {
       if (res.status === 429) return;
       if (!res.ok) return;
 
-      // Read response body for device list and displayName
+      // Read response body for device list, displayName, and server aggregate
       try {
         const body = await res.json();
         if (body.displayName) {
@@ -401,6 +406,10 @@ export class SharingManager extends EventEmitter {
           this._devices = body.devices;
           setConfig('devices', JSON.stringify(body.devices));
           this.emit('devices-changed', this._devices);
+        }
+        if (body.serverAggregate) {
+          this._serverAggregate = body.serverAggregate;
+          this.emit('aggregate-changed', this._serverAggregate);
         }
       } catch {}
     } catch {

@@ -111,23 +111,35 @@ final class AppState: ObservableObject {
                 items.append(ContextItem(label: friend.name, value: friend.tokens, subtitle: sub))
             }
         } else {
-            // Default: rotate through WEEK, MONTH, TOTAL — skip the pinned one
-            let weekStr = formatTokens(dataStore?.weekTokens ?? 0)
-            let monthStr = formatTokens(dataStore?.monthTokens ?? 0)
-            let totalStr = formatTokens(dataStore?.allTimeTokens ?? 0)
+            // Default: rotate through WEEK, MONTH, TOTAL — skip the pinned one.
+            // Use server aggregate when devices are linked, local data otherwise.
+            let sm = sharingManager
+            let filter = dataStore?.modelFilter
+
+            func tokensFor(_ period: String) -> Int {
+                if let sm, let agg = sm.aggregateTokens(for: filter, period: period) {
+                    return agg
+                }
+                switch period {
+                case "today": return dataStore?.todayTokens ?? 0
+                case "week": return dataStore?.weekTokens ?? 0
+                case "month": return dataStore?.monthTokens ?? 0
+                case "allTime": return dataStore?.allTimeTokens ?? 0
+                default: return 0
+                }
+            }
 
             if pinnedDisplay != "today" {
-                let todayStr = formatTokens(dataStore?.todayTokens ?? 0)
-                items.append(ContextItem(label: "TODAY", value: todayStr))
+                items.append(ContextItem(label: "TODAY", value: formatTokens(tokensFor("today"))))
             }
             if pinnedDisplay != "week" {
-                items.append(ContextItem(label: "WEEK", value: weekStr))
+                items.append(ContextItem(label: "WEEK", value: formatTokens(tokensFor("week"))))
             }
             if pinnedDisplay != "month" {
-                items.append(ContextItem(label: "MONTH", value: monthStr))
+                items.append(ContextItem(label: "MONTH", value: formatTokens(tokensFor("month"))))
             }
             if pinnedDisplay != "allTime" {
-                items.append(ContextItem(label: "TOTAL", value: totalStr))
+                items.append(ContextItem(label: "TOTAL", value: formatTokens(tokensFor("allTime"))))
             }
         }
 
@@ -154,6 +166,36 @@ final class AppState: ObservableObject {
 
     private func updatePinnedDisplay(dataStore: TokenDataStore?) {
         guard let store = dataStore else { return }
+
+        // When devices are linked and server aggregate is available, show combined total
+        // with real-time delta on top for "today" period responsiveness between pushes.
+        if let sm = sharingManager, sm.hasServerAggregate {
+            let period = pinnedDisplay == "today" || pinnedDisplay == "week" || pinnedDisplay == "month" || pinnedDisplay == "allTime" ? pinnedDisplay : "today"
+            if let aggTokens = sm.aggregateTokens(for: store.modelFilter, period: period) {
+                switch period {
+                case "today":
+                    pinnedLabel = "TODAY"
+                    let delta = realtimeFlipDisplay ? store.realtimeDelta : 0
+                    pinnedValue = formatTokens(aggTokens + delta)
+                case "week":
+                    pinnedLabel = "WEEK"
+                    pinnedValue = formatTokens(aggTokens)
+                case "month":
+                    pinnedLabel = "MONTH"
+                    pinnedValue = formatTokens(aggTokens)
+                case "allTime":
+                    pinnedLabel = "TOTAL"
+                    pinnedValue = formatTokens(aggTokens)
+                default:
+                    pinnedLabel = "TODAY"
+                    let delta = realtimeFlipDisplay ? store.realtimeDelta : 0
+                    pinnedValue = formatTokens(aggTokens + delta)
+                }
+                return
+            }
+        }
+
+        // Fallback: local-only display (single device or no aggregate data)
         switch pinnedDisplay {
         case "today":
             pinnedLabel = "TODAY"

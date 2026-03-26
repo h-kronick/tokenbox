@@ -89,6 +89,24 @@ struct MainWindowView: View {
                         }
                     }
 
+                    // Linked devices indicator — subtle icon when multi-device
+                    if !sharingManager.linkedDevices.isEmpty {
+                        Button {
+                            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "link")
+                                    .font(.system(size: 10))
+                                Text("\(sharingManager.linkedDevices.count)")
+                                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            }
+                            .foregroundColor(currentTheme.characterColor.opacity(0.6))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.leading, 6)
+                        .help("\(sharingManager.linkedDevices.count) linked devices")
+                    }
+
                     Spacer()
 
                     // Update indicator — subtle pulsing dot + label
@@ -190,12 +208,17 @@ struct MainWindowView: View {
                 return sm.friends.map { friend in
                     let tokens: Int
                     if friend.shareCode == sm.myShareCode {
-                        // Use local data for self
-                        switch period {
-                        case "week": tokens = ds.weekTokens
-                        case "month": tokens = ds.monthTokens
-                        case "allTime": tokens = ds.allTimeTokens
-                        default: tokens = ds.realtimeDisplayTokens
+                        // Use server aggregate for self when devices linked, local data otherwise
+                        if let agg = sm.aggregateTokens(for: ds.modelFilter, period: period) {
+                            let delta = period == "today" ? ds.realtimeDelta : 0
+                            tokens = agg + delta
+                        } else {
+                            switch period {
+                            case "week": tokens = ds.weekTokens
+                            case "month": tokens = ds.monthTokens
+                            case "allTime": tokens = ds.allTimeTokens
+                            default: tokens = ds.realtimeDisplayTokens
+                            }
                         }
                     } else {
                         tokens = friend.tokens(for: ds.modelFilter, period: period)
@@ -263,6 +286,10 @@ struct MainWindowView: View {
             refreshContext()
         }
         .onReceive(NotificationCenter.default.publisher(for: .friendsDidChange)) { _ in
+            refreshContext()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .serverAggregateDidChange)) { _ in
+            refreshValues()
             refreshContext()
         }
         .onReceive(NotificationCenter.default.publisher(for: .displayNameDidChange)) { _ in
@@ -475,11 +502,17 @@ struct MainWindowView: View {
         return sharingManager.friends.map { friend in
             let tokens: Int
             if friend.shareCode == sharingManager.myShareCode {
-                switch period {
-                case "week": tokens = dataStore.weekTokens
-                case "month": tokens = dataStore.monthTokens
-                case "allTime": tokens = dataStore.allTimeTokens
-                default: tokens = dataStore.realtimeDisplayTokens
+                // Use server aggregate for self when devices linked, local data otherwise
+                if let agg = sharingManager.aggregateTokens(for: dataStore.modelFilter, period: period) {
+                    let delta = period == "today" ? dataStore.realtimeDelta : 0
+                    tokens = agg + delta
+                } else {
+                    switch period {
+                    case "week": tokens = dataStore.weekTokens
+                    case "month": tokens = dataStore.monthTokens
+                    case "allTime": tokens = dataStore.allTimeTokens
+                    default: tokens = dataStore.realtimeDisplayTokens
+                    }
                 }
             } else {
                 tokens = friend.tokens(for: dataStore.modelFilter, period: period)

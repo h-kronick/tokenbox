@@ -80,6 +80,10 @@ export async function main(overrides = {}) {
     data.setFriends(friends);
   });
 
+  sharing.on('aggregate-changed', (agg) => {
+    data.setServerAggregate(agg);
+  });
+
   // --- Settings events ---
 
   settings.on('settings-changed', ({ key, value }) => {

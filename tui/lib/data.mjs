@@ -47,6 +47,7 @@ export class DataManager extends EventEmitter {
     this._firstLiveEvent = true;
     this._lastPSTDate = null;
     this._periodicTimer = null;
+    this._serverAggregate = null; // server aggregate from linked devices
   }
 
   start(modelFilter, pinnedPeriod) {
@@ -115,9 +116,14 @@ export class DataManager extends EventEmitter {
   setPinnedPeriod(p) {
     this._pinnedPeriod = p;
     this._contextIndex = 0;
+    const aggValue = this._aggregateTokens(p);
+    const localValue = this._tokens[p] + (p === 'today' ? this._realtimeDelta : 0);
+    const value = aggValue != null
+      ? aggValue + (p === 'today' ? this._realtimeDelta : 0)
+      : localValue;
     this.emit('pinned-change', {
       label: PERIOD_LABELS[p],
-      value: this._tokens[p] + (p === 'today' ? this._realtimeDelta : 0),
+      value,
       modelName: formatModelName(this._modelFilter),
       resetTime: timeUntilReset(),
     });
@@ -151,7 +157,10 @@ export class DataManager extends EventEmitter {
 
     if (delta > 0) {
       this._realtimeDelta += delta;
-      const val = this._tokens[this._pinnedPeriod] + (this._pinnedPeriod === 'today' ? this._realtimeDelta : 0);
+      const aggValue = this._aggregateTokens(this._pinnedPeriod);
+      const localBase = this._tokens[this._pinnedPeriod];
+      const base = aggValue != null ? aggValue : localBase;
+      const val = base + (this._pinnedPeriod === 'today' ? this._realtimeDelta : 0);
       this.emit('pinned-change', {
         label: PERIOD_LABELS[this._pinnedPeriod],
         value: val,
@@ -168,6 +177,47 @@ export class DataManager extends EventEmitter {
     if (this._friends.length > 0) {
       this._emitContextChange();
     }
+  }
+
+  setServerAggregate(agg) {
+    this._serverAggregate = agg || null;
+    this._refreshTokens();
+  }
+
+  /**
+   * Extract filtered aggregate value for a period from server aggregate.
+   * Mirrors macOS SharingManager.aggregateTokens(for:period:).
+   * Returns null if no aggregate or no linked devices.
+   */
+  _aggregateTokens(period) {
+    const agg = this._serverAggregate;
+    if (!agg) return null;
+
+    const periodMap = {
+      today: agg.tokensByModel,
+      week: agg.weekByModel,
+      month: agg.monthByModel,
+      allTime: agg.allTimeByModel,
+    };
+    const map = periodMap[period] || agg.tokensByModel;
+
+    // If no per-model map, fall back to todayTokens for "today" period
+    if (!map || Object.keys(map).length === 0) {
+      return period === 'today' ? (agg.todayTokens || 0) : null;
+    }
+
+    const filter = this._modelFilter;
+    if (!filter || filter === 'all') {
+      return Object.values(map).reduce((a, b) => a + b, 0);
+    }
+
+    // Substring match on model keys (e.g. "opus" matches "claude-opus-4-6")
+    const lf = filter.toLowerCase();
+    let total = 0;
+    for (const [key, val] of Object.entries(map)) {
+      if (key.toLowerCase().includes(lf)) total += val;
+    }
+    return total;
   }
 
   _startWatcher() {
@@ -354,8 +404,12 @@ export class DataManager extends EventEmitter {
     this._tokens.month = this._queryOutputTokens(monthStartStr, nowStr, filter);
     this._tokens.allTime = this._queryOutputTokens(null, null, filter);
 
-    // Emit current pinned value
-    const pinnedVal = this._tokens[this._pinnedPeriod] + (this._pinnedPeriod === 'today' ? this._realtimeDelta : 0);
+    // Emit current pinned value — use server aggregate when linked devices exist
+    const aggValue = this._aggregateTokens(this._pinnedPeriod);
+    const localValue = this._tokens[this._pinnedPeriod] + (this._pinnedPeriod === 'today' ? this._realtimeDelta : 0);
+    const pinnedVal = aggValue != null
+      ? aggValue + (this._pinnedPeriod === 'today' ? this._realtimeDelta : 0)
+      : localValue;
     this.emit('pinned-change', {
       label: PERIOD_LABELS[this._pinnedPeriod],
       value: pinnedVal,

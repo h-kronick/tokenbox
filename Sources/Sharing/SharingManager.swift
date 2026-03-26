@@ -20,6 +20,9 @@ final class SharingManager: ObservableObject {
     @Published var linkedDevices: [LinkedDevice] = []
     @Published var activeLinkCode: String? = nil
     @Published var isGeneratingLink: Bool = false
+    /// Server aggregate token data (combined across all linked devices).
+    /// Only populated when devices are linked and server returns aggregate data.
+    @Published var serverAggregate: CloudSharingClient.ServerAggregate?
     /// The model the leaderboard panel is currently showing. Set by LeaderboardSidePanel
     /// so the periodic fetch uses the correct model tab.
     var leaderboardModel: String = "opus"
@@ -319,6 +322,12 @@ final class SharingManager: ObservableObject {
             if let devices = pushResponse.devices {
                 linkedDevices = devices
             }
+
+            // Store server aggregate for multi-device display
+            if let agg = pushResponse.serverAggregate {
+                serverAggregate = agg
+                NotificationCenter.default.post(name: .serverAggregateDidChange, object: nil)
+            }
         } catch CloudSharingError.rateLimited {
             // Silently absorb — client-side throttle will prevent repeats
             lastPushTime = now
@@ -612,6 +621,38 @@ final class SharingManager: ObservableObject {
         }
     }
 
+    // MARK: - Server Aggregate Helpers
+
+    /// Whether this device has linked peers and server aggregate data is available.
+    var hasServerAggregate: Bool {
+        !linkedDevices.isEmpty && serverAggregate != nil
+    }
+
+    /// Get filtered aggregate tokens for a period, applying the given model filter.
+    func aggregateTokens(for modelFilter: String?, period: String) -> Int? {
+        guard let agg = serverAggregate, !linkedDevices.isEmpty else { return nil }
+
+        let map: [String: Int]?
+        switch period {
+        case "today": map = agg.tokensByModel
+        case "week": map = agg.weekByModel
+        case "month": map = agg.monthByModel
+        case "allTime": map = agg.allTimeByModel
+        default: map = agg.tokensByModel
+        }
+
+        // If no per-model map, fall back to todayTokens for "today" period
+        guard let modelMap = map, !modelMap.isEmpty else {
+            return period == "today" ? agg.todayTokens : nil
+        }
+
+        guard let filter = modelFilter else {
+            return modelMap.values.reduce(0, +)
+        }
+        let lf = filter.lowercased()
+        return modelMap.filter { $0.key.lowercased().contains(lf) }.values.reduce(0, +)
+    }
+
     // MARK: - Persistence
 
     private func loadFriends() {
@@ -678,6 +719,7 @@ extension Notification.Name {
     static let friendsDidChange = Notification.Name("TokenBoxFriendsDidChange")
     static let displayNameDidChange = Notification.Name("TokenBoxDisplayNameDidChange")
     static let displaySettingsDidChange = Notification.Name("TokenBoxDisplaySettingsDidChange")
+    static let serverAggregateDidChange = Notification.Name("TokenBoxServerAggregateDidChange")
 }
 
 // MARK: - Errors
