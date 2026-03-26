@@ -155,6 +155,19 @@ struct LeaderboardSidePanel: View {
                         .tracking(1)
                         .foregroundColor(theme.sectionLabel)
                     Spacer()
+                    Button {
+                        Task {
+                            isLoading = true
+                            await sharingManager.fetchLeaderboard(model: selectedModel)
+                            isLoading = false
+                        }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundColor(theme.sectionLabel.opacity(0.5))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Refresh leaderboard")
                 }
 
                 Text(Self.pstDateFormatter.string(from: Date()) + " PST")
