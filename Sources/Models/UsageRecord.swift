@@ -96,6 +96,8 @@ struct LinkedDevice: Codable, Equatable, Sendable, Identifiable {
     let deviceId: String
     let label: String?
     let lastPush: String?       // ISO 8601 datetime of last push
+    let todayTokens: Int?       // today's total tokens for this device
+    let tokensByModel: [String: Int]?  // per-model breakdown (opus, sonnet, haiku)
     var id: String { deviceId }
 }
 

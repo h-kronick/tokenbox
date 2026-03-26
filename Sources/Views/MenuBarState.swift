@@ -27,13 +27,15 @@ final class MenuBarState: ObservableObject {
     static let colorCount = 6
 
     private weak var dataStore: TokenDataStore?
+    private weak var sharingManager: SharingManager?
     private var timer: DispatchSourceTimer?
     private var colorTimer: DispatchSourceTimer?
     private var lastKnownTokens: Int = 0
     private var lastChangeTime: Date = .distantPast
 
-    init(dataStore: TokenDataStore) {
+    init(dataStore: TokenDataStore, sharingManager: SharingManager? = nil) {
         self.dataStore = dataStore
+        self.sharingManager = sharingManager
         startPolling()
     }
 
@@ -59,15 +61,26 @@ final class MenuBarState: ObservableObject {
         displayLabel = pinned
 
         let newTokens: Int
-        switch pinned {
-        case "week":
-            newTokens = ds.weekTokens
-        case "month":
-            newTokens = ds.monthTokens
-        case "allTime":
-            newTokens = ds.allTimeTokens
-        default:
-            newTokens = ds.realtimeDisplayTokens
+        // Use server aggregate when devices are linked (matches main display behavior)
+        if let sm = sharingManager, sm.hasServerAggregate,
+           let aggTokens = sm.aggregateTokens(for: ds.modelFilter, period: pinned) {
+            switch pinned {
+            case "today":
+                newTokens = aggTokens + ds.realtimeDelta
+            default:
+                newTokens = aggTokens
+            }
+        } else {
+            switch pinned {
+            case "week":
+                newTokens = ds.weekTokens
+            case "month":
+                newTokens = ds.monthTokens
+            case "allTime":
+                newTokens = ds.allTimeTokens
+            default:
+                newTokens = ds.realtimeDisplayTokens
+            }
         }
 
         if newTokens != lastKnownTokens {

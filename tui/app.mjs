@@ -712,12 +712,13 @@ export async function main(overrides = {}) {
       { key: 'pinnedPeriod', label: 'Pinned', cycle: PERIOD_CYCLE },
       { key: 'theme', label: 'Theme', cycle: THEME_CYCLE },
       { key: 'animationSpeed', label: 'Speed', cycle: SPEED_CYCLE, format: v => `${v}x` },
+      { key: '_sharing', label: 'Sharing', action: true, format: () => sharing.isRegistered() ? `${sharing.getShareCode()} →` : 'Not set up →' },
     ];
 
     let selected = 0;
 
     function renderPrefs() {
-      let content = '{bold}Preferences{/bold}  (↑↓ navigate, Enter cycle, Esc close)\n\n';
+      let content = '{bold}Preferences{/bold}  (↑↓ navigate, Enter cycle/open, Esc close)\n\n';
       items.forEach((item, i) => {
         const val = item.format ? item.format(currentSettings[item.key]) : currentSettings[item.key];
         const prefix = i === selected ? ' ▸ ' : '   ';
@@ -741,6 +742,13 @@ export async function main(overrides = {}) {
 
     box.key(['enter', 'space'], () => {
       const item = items[selected];
+      if (item.action) {
+        // Action items open sub-overlays
+        box.destroy();
+        activeOverlay = null;
+        if (item.key === '_sharing') showSharingOverlay();
+        return;
+      }
       const cycle = item.cycle;
       const cur = currentSettings[item.key];
       const idx = cycle.indexOf(cur);
@@ -1164,6 +1172,11 @@ export async function main(overrides = {}) {
   }
 
   // --- Start everything ---
+
+  // Ensure keyboard input is captured immediately (fixes Linux first-launch issue
+  // where stdin may not be fully initialized when launched via exec from install script)
+  screen.enableKeys();
+  screen.program.hideCursor();
 
   // Startup cascade — simulate display warming up
   display.render();

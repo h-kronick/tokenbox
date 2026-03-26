@@ -344,30 +344,52 @@ struct SharingTab: View {
                             .foregroundColor(.secondary)
                     } else {
                         ForEach(sharingManager.linkedDevices) { device in
-                            HStack(spacing: 8) {
-                                Image(systemName: device.deviceId == sharingManager.deviceId ? "desktopcomputer" : "display")
-                                    .foregroundColor(.secondary)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(device.label ?? String(device.deviceId.prefix(8)))
-                                        .fontWeight(device.deviceId == sharingManager.deviceId ? .semibold : .regular)
-                                    if let lastPush = device.lastPush {
-                                        Text("Last active \(Self.relativeTime(from: lastPush))")
-                                            .font(.caption2)
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                                if device.deviceId == sharingManager.deviceId {
-                                    Text("(this device)")
-                                        .font(.caption2)
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: device.deviceId == sharingManager.deviceId ? "desktopcomputer" : "display")
                                         .foregroundColor(.secondary)
-                                }
-                                Spacer()
-                                if device.deviceId != sharingManager.deviceId {
-                                    Button("Unlink") {
-                                        Task { await sharingManager.unlinkDevice(device.deviceId) }
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        HStack(spacing: 4) {
+                                            Text(device.label ?? String(device.deviceId.prefix(8)))
+                                                .fontWeight(device.deviceId == sharingManager.deviceId ? .semibold : .regular)
+                                            if device.deviceId == sharingManager.deviceId {
+                                                Text("(this device)")
+                                                    .font(.caption2)
+                                                    .foregroundColor(.secondary)
+                                            }
+                                        }
+                                        if let lastPush = device.lastPush {
+                                            Text("Last active \(Self.relativeTime(from: lastPush))")
+                                                .font(.caption2)
+                                                .foregroundColor(.secondary)
+                                        }
                                     }
-                                    .foregroundColor(.red)
-                                    .controlSize(.small)
+                                    Spacer()
+                                    if device.deviceId != sharingManager.deviceId {
+                                        Button("Unlink") {
+                                            Task { await sharingManager.unlinkDevice(device.deviceId) }
+                                        }
+                                        .foregroundColor(.red)
+                                        .controlSize(.small)
+                                    }
+                                }
+                                // Per-model token breakdown
+                                if let tbm = device.tokensByModel, !tbm.isEmpty {
+                                    HStack(spacing: 12) {
+                                        ForEach(["opus", "sonnet", "haiku"], id: \.self) { model in
+                                            if let count = tbm[model], count > 0 {
+                                                HStack(spacing: 2) {
+                                                    Text(model.capitalized)
+                                                        .font(.caption2)
+                                                        .foregroundColor(.secondary)
+                                                    Text(Self.formatCompact(count))
+                                                        .font(.system(.caption2, design: .monospaced))
+                                                        .fontWeight(.medium)
+                                                }
+                                            }
+                                        }
+                                    }
+                                    .padding(.leading, 28) // align with text after icon
                                 }
                             }
                         }
@@ -560,6 +582,12 @@ struct SharingTab: View {
         let rel = RelativeDateTimeFormatter()
         rel.unitsStyle = .abbreviated
         return rel.localizedString(for: date, relativeTo: Date())
+    }
+
+    private static func formatCompact(_ n: Int) -> String {
+        if n >= 1_000_000 { return String(format: "%.1fM", Double(n) / 1_000_000) }
+        if n >= 1_000 { return String(format: "%.1fK", Double(n) / 1_000) }
+        return "\(n)"
     }
 }
 

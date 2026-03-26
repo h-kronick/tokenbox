@@ -73,7 +73,7 @@ export class Display {
       left: 0,
       right: 0,
       height: 1,
-      content: ' [s]hare [l]eader [p]refs [r]efresh [q]uit',
+      content: ' [l]eader [p]refs [r]efresh',
       style: {
         bg: this._theme.bg,
         fg: this._theme.fg,
@@ -85,7 +85,7 @@ export class Display {
   }
 
   _updateStatusBar() {
-    const base = ' [s]hare [l]eader [p]refs [r]efresh [q]uit';
+    const base = ' [l]eader [p]refs [r]efresh';
     if (this._updateAvailable) {
       this._statusBar.setContent(`${base}  {green-fg}↑ update [u]{/green-fg}`);
     } else {

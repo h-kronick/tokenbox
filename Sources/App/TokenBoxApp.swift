@@ -13,7 +13,7 @@ struct TokenBoxApp: App {
         let ds = TokenDataStore()
         _dataStore = StateObject(wrappedValue: ds)
         _sharingManager = StateObject(wrappedValue: SharingManager.shared)
-        _menuBarState = StateObject(wrappedValue: MenuBarState(dataStore: ds))
+        _menuBarState = StateObject(wrappedValue: MenuBarState(dataStore: ds, sharingManager: SharingManager.shared))
 
         // Share with AppDelegate for the main window
         AppDelegate.sharedAppState = _appState
