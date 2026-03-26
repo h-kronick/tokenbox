@@ -16,6 +16,11 @@ struct MainWindowView: View {
     @State private var justRegistered = false
     @State private var showLeaderboard = false
     @State private var showUpdatePopover = false
+    @State private var showAddFriend = false
+    @State private var addFriendInput = ""
+    @State private var addFriendError = ""
+    @State private var isAddingFriend = false
+    @State private var addFriendSuccess = false
     @StateObject private var updateChecker = UpdateChecker()
 
     var body: some View {
@@ -62,6 +67,26 @@ struct MainWindowView: View {
                     .buttonStyle(.plain)
                     .popover(isPresented: $showSharePopover, arrowEdge: .bottom) {
                         sharePopoverContent
+                    }
+
+                    // Add friend button — only when registered
+                    if sharingManager.isRegistered {
+                        Button {
+                            addFriendInput = ""
+                            addFriendError = ""
+                            addFriendSuccess = false
+                            showAddFriend = true
+                        } label: {
+                            Image(systemName: "person.badge.plus")
+                                .font(.system(size: 12))
+                                .foregroundColor(currentTheme.labelColor.opacity(0.4))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.leading, 8)
+                        .help("Add a friend")
+                        .popover(isPresented: $showAddFriend, arrowEdge: .bottom) {
+                            addFriendPopoverContent
+                        }
                     }
 
                     Spacer()
@@ -355,6 +380,85 @@ struct MainWindowView: View {
             }
             .padding(16)
             .frame(width: 220)
+        }
+    }
+
+    @ViewBuilder
+    private var addFriendPopoverContent: some View {
+        if addFriendSuccess {
+            // Success state — auto-dismiss after a moment
+            VStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(.green)
+                Text("Friend added!")
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .padding(16)
+            .frame(width: 200)
+            .onAppear {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    showAddFriend = false
+                    addFriendSuccess = false
+                }
+            }
+        } else {
+            VStack(spacing: 10) {
+                Text("Add a friend")
+                    .font(.system(size: 12, weight: .medium))
+                Text("Paste their share code or link")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                HStack(spacing: 6) {
+                    TextField("e.g. XNBGBU", text: $addFriendInput)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 12, design: .monospaced))
+                        .frame(width: 130)
+                        .onSubmit { addFriend() }
+
+                    Button {
+                        addFriend()
+                    } label: {
+                        if isAddingFriend {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Text("Add")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(addFriendInput.trimmingCharacters(in: .whitespaces).isEmpty || isAddingFriend)
+                }
+
+                if !addFriendError.isEmpty {
+                    Text(addFriendError)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(16)
+            .frame(width: 220)
+        }
+    }
+
+    private func addFriend() {
+        let input = addFriendInput.trimmingCharacters(in: .whitespaces)
+        guard !input.isEmpty else { return }
+        addFriendError = ""
+        isAddingFriend = true
+        Task {
+            do {
+                try await sharingManager.addFriend(input: input)
+                addFriendInput = ""
+                withAnimation { addFriendSuccess = true }
+            } catch {
+                addFriendError = error.localizedDescription
+            }
+            isAddingFriend = false
         }
     }
 
