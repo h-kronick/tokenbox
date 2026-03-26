@@ -256,6 +256,7 @@ struct MainWindowView: View {
                     async let friendsFetch: () = sharingManager.fetchAllFriends()
                     async let leaderboardFetch: () = sharingManager.fetchLeaderboard(model: sharingManager.leaderboardModel)
                     _ = await (friendsFetch, leaderboardFetch)
+                    sharingManager.syncFriendsFromLeaderboard()
                     refreshContext()
                 }
             }

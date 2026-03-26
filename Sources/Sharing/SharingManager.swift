@@ -584,7 +584,7 @@ final class SharingManager: ObservableObject {
     /// If a friend's display name matches a leaderboard username, update the friend's
     /// per-model token breakdown to match the leaderboard value. This ensures the
     /// context row and leaderboard panel always show the same number for the same user.
-    private func syncFriendsFromLeaderboard() {
+    func syncFriendsFromLeaderboard() {
         guard !leaderboardEntries.isEmpty, !friends.isEmpty else { return }
 
         // Build lookup: lowercase username → leaderboard tokens
