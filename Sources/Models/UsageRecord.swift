@@ -91,6 +91,14 @@ struct CloudFriend: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+/// A device linked to the same share identity for multi-device usage
+struct LinkedDevice: Codable, Equatable, Sendable, Identifiable {
+    let deviceId: String
+    let label: String?
+    let lastPush: String?       // ISO 8601 datetime of last push
+    var id: String { deviceId }
+}
+
 /// A leaderboard entry from the public daily rankings
 struct LeaderboardEntry: Codable, Identifiable {
     let rank: Int

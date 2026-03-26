@@ -11,6 +11,11 @@ actor CloudSharingClient {
         let shareURL: String
     }
 
+    struct PushResponse: Codable {
+        let displayName: String?
+        let devices: [LinkedDevice]?
+    }
+
     struct PeekResponse: Codable {
         let displayName: String
         let todayTokens: Int
@@ -51,7 +56,8 @@ actor CloudSharingClient {
     }
 
     /// Push token counts to the cloud, with per-model breakdowns for all periods.
-    func push(shareCode: String, secretToken: String, todayTokens: Int, todayDate: String, tokensByModel: [String: Int] = [:], weekByModel: [String: Int] = [:], monthByModel: [String: Int] = [:], allTimeByModel: [String: Int] = [:], displayName: String? = nil) async throws {
+    @discardableResult
+    func push(shareCode: String, secretToken: String, todayTokens: Int, todayDate: String, tokensByModel: [String: Int] = [:], weekByModel: [String: Int] = [:], monthByModel: [String: Int] = [:], allTimeByModel: [String: Int] = [:], displayName: String? = nil, deviceId: String? = nil) async throws -> PushResponse {
         guard let url = URL(string: "\(Self.baseURL)/push") else {
             throw CloudSharingError.invalidURL(endpoint: "push")
         }
@@ -69,6 +75,7 @@ actor CloudSharingClient {
             let monthByModel: [String: Int]
             let allTimeByModel: [String: Int]
             let displayName: String?
+            let deviceId: String?
         }
         request.httpBody = try encoder.encode(PushBody(
             shareCode: shareCode,
@@ -78,11 +85,13 @@ actor CloudSharingClient {
             weekByModel: weekByModel,
             monthByModel: monthByModel,
             allTimeByModel: allTimeByModel,
-            displayName: displayName
+            displayName: displayName,
+            deviceId: deviceId
         ))
 
-        let (_, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validateResponse(response)
+        return (try? decoder.decode(PushResponse.self, from: data)) ?? PushResponse(displayName: nil, devices: nil)
     }
 
     /// Peek at a friend's current token count by share code.
@@ -97,6 +106,76 @@ actor CloudSharingClient {
         let (data, response) = try await session.data(for: request)
         try validateResponse(response)
         return try decoder.decode(PeekResponse.self, from: data)
+    }
+
+    // MARK: - Device Linking Endpoints
+
+    struct CreateLinkResponse: Codable {
+        let linkCode: String
+    }
+
+    struct RedeemLinkResponse: Codable {
+        let shareCode: String
+        let secretToken: String
+        let displayName: String
+        let deviceId: String
+    }
+
+    /// Create a link code for multi-device linking. Requires active sharing.
+    func createLinkToken(shareCode: String, secretToken: String) async throws -> CreateLinkResponse {
+        guard let url = URL(string: "\(Self.baseURL)/link/create") else {
+            throw CloudSharingError.invalidURL(endpoint: "link/create")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(secretToken)", forHTTPHeaderField: "Authorization")
+
+        request.httpBody = try encoder.encode(["shareCode": shareCode])
+
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response)
+        return try decoder.decode(CreateLinkResponse.self, from: data)
+    }
+
+    /// Redeem a link code to join an existing share identity from another device.
+    func redeemLinkToken(linkCode: String, deviceLabel: String? = nil) async throws -> RedeemLinkResponse {
+        guard let url = URL(string: "\(Self.baseURL)/link/redeem") else {
+            throw CloudSharingError.invalidURL(endpoint: "link/redeem")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        struct RedeemBody: Encodable {
+            let linkCode: String
+            let deviceLabel: String?
+        }
+        request.httpBody = try encoder.encode(RedeemBody(linkCode: linkCode, deviceLabel: deviceLabel))
+
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response)
+        return try decoder.decode(RedeemLinkResponse.self, from: data)
+    }
+
+    /// Unlink a device from the shared identity.
+    func unlinkDevice(shareCode: String, secretToken: String, deviceId: String) async throws {
+        guard let url = URL(string: "\(Self.baseURL)/unlink") else {
+            throw CloudSharingError.invalidURL(endpoint: "unlink")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(secretToken)", forHTTPHeaderField: "Authorization")
+
+        struct UnlinkBody: Encodable {
+            let shareCode: String
+            let deviceId: String
+        }
+        request.httpBody = try encoder.encode(UnlinkBody(shareCode: shareCode, deviceId: deviceId))
+
+        let (_, response) = try await session.data(for: request)
+        try validateResponse(response)
     }
 
     // MARK: - Leaderboard Endpoints

@@ -303,12 +303,26 @@ case "${1:-}" in
     shift
     launch_tui "$@"
     ;;
+  link)
+    shift
+    exec node "$REPO_DIR/tui/index.mjs" link "$@"
+    ;;
+  devices)
+    exec node "$REPO_DIR/tui/index.mjs" devices
+    ;;
+  unlink)
+    shift
+    exec node "$REPO_DIR/tui/index.mjs" unlink "$@"
+    ;;
   help|--help|-h)
     echo "Usage: tokenbox [command]"
     echo ""
     echo "Commands:"
     echo "  (none)          Launch TokenBox (native app on macOS, TUI elsewhere)"
     echo "  tui             Launch terminal UI (any platform)"
+    echo "  link [code]     Generate or redeem a device link code"
+    echo "  devices         List linked devices"
+    echo "  unlink <id>     Unlink a device"
     echo "  uninstall       Remove TokenBox completely"
     echo "  uninstall --keep-data  Remove but keep token history"
     echo "  update          Pull latest and rebuild"
@@ -351,6 +365,9 @@ echo -e "  ${BOLD}Usage:${RESET}   Token tracking starts automatically"
 echo -e "           as you use Claude Code."
 echo -e "  ${BOLD}Update:${RESET} tokenbox update"
 echo -e "  ${BOLD}Remove:${RESET} tokenbox uninstall"
+echo -e "  ${BOLD}Multi-device:${RESET} Use Claude Code on multiple machines?"
+echo -e "           Link them in Settings > Sharing, or run"
+echo -e "           ${AMBER}tokenbox link${RESET} to combine your stats."
 echo ""
 
 # Launch

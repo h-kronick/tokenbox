@@ -17,6 +17,9 @@ final class SharingManager: ObservableObject {
     @Published var leaderboardOptIn: Bool = false
     @Published var leaderboardUsername: String = ""
     @Published var leaderboardEntries: [LeaderboardEntry] = []
+    @Published var linkedDevices: [LinkedDevice] = []
+    @Published var activeLinkCode: String? = nil
+    @Published var isGeneratingLink: Bool = false
     /// The model the leaderboard panel is currently showing. Set by LeaderboardSidePanel
     /// so the periodic fetch uses the correct model tab.
     var leaderboardModel: String = "opus"
@@ -29,12 +32,15 @@ final class SharingManager: ObservableObject {
     private let client = CloudSharingClient()
     private var pushTimer: AnyCancellable?
     private var fetchTimer: AnyCancellable?
+    private var linkCodeTimer: AnyCancellable?
     private var persistCancellables: Set<AnyCancellable> = []
     private var lastPushedTokens: Int = 0
     private var lastPushTime: Date = .distantPast
     private var isSyncing: Bool = false
     private let secretTokenKey = "sharingSecretToken"
     private let leaderboardEmailKey = "leaderboardEmail"
+    private let deviceIdKey = "deviceId"
+    let deviceId: String
 
     private static let dayFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -50,6 +56,15 @@ final class SharingManager: ObservableObject {
         myShareCode = defaults.string(forKey: "myShareCode") ?? ""
         leaderboardOptIn = defaults.bool(forKey: "leaderboardOptIn")
         leaderboardUsername = defaults.string(forKey: "leaderboardUsername") ?? ""
+
+        if let existing = defaults.string(forKey: deviceIdKey), !existing.isEmpty {
+            deviceId = existing
+        } else {
+            let newId = UUID().uuidString
+            defaults.set(newId, forKey: deviceIdKey)
+            deviceId = newId
+        }
+
         loadFriends()
 
         // Persist @Published changes to UserDefaults via Combine
@@ -78,11 +93,18 @@ final class SharingManager: ObservableObject {
     // MARK: - Registration
 
     /// Reset sharing state so the user can re-register with a fresh share code + token.
-    func resetRegistration() {
+    func resetRegistration() async {
+        // Unlink this device from the shared identity before clearing local state
+        if isRegistered, let token = getSecretToken() {
+            try? await client.unlinkDevice(shareCode: myShareCode, secretToken: token, deviceId: deviceId)
+        }
         myShareCode = ""
         myShareURL = ""
         isRegistered = false
         sharingEnabled = false
+        linkedDevices = []
+        activeLinkCode = nil
+        linkCodeTimer?.cancel()
         UserDefaults.standard.removeObject(forKey: secretTokenKey)
         lastError = nil
     }
@@ -270,7 +292,7 @@ final class SharingManager: ObservableObject {
         let todayDate = Self.dayFormatter.string(from: now)
 
         do {
-            try await client.push(
+            let pushResponse = try await client.push(
                 shareCode: myShareCode,
                 secretToken: token,
                 todayTokens: todayTokens,
@@ -279,11 +301,24 @@ final class SharingManager: ObservableObject {
                 weekByModel: Self.buildModelMap(weekByModel),
                 monthByModel: Self.buildModelMap(monthByModel),
                 allTimeByModel: Self.buildModelMap(allTimeByModel),
-                displayName: displayName ?? myDisplayName
+                displayName: displayName ?? myDisplayName,
+                deviceId: deviceId
             )
             lastPushedTokens = todayTokens
             lastPushTime = now
             lastError = nil
+
+            // Sync display name from server if it differs
+            if let serverName = pushResponse.displayName,
+               !serverName.isEmpty,
+               Self.sanitizeDisplayName(serverName).uppercased() != myDisplayName {
+                myDisplayName = Self.sanitizeDisplayName(serverName).uppercased()
+            }
+
+            // Parse linked devices from response (only present when deviceId was sent)
+            if let devices = pushResponse.devices {
+                linkedDevices = devices
+            }
         } catch CloudSharingError.rateLimited {
             // Silently absorb — client-side throttle will prevent repeats
             lastPushTime = now
@@ -335,6 +370,87 @@ final class SharingManager: ObservableObject {
             }
         }
         saveFriends()
+    }
+
+    // MARK: - Device Linking
+
+    /// Generate a link code for multi-device linking. Auto-clears after 15 minutes.
+    func createLinkCode() async {
+        guard isRegistered else {
+            lastError = "Enable sharing first to link devices"
+            return
+        }
+        guard let token = getSecretToken() else {
+            lastError = "Secret token missing — please re-register"
+            return
+        }
+
+        isGeneratingLink = true
+        defer { isGeneratingLink = false }
+
+        do {
+            let response = try await client.createLinkToken(shareCode: myShareCode, secretToken: token)
+            activeLinkCode = response.linkCode
+            lastError = nil
+
+            // Auto-clear after 15 minutes
+            linkCodeTimer?.cancel()
+            linkCodeTimer = Timer.publish(every: 15 * 60, on: .main, in: .common)
+                .autoconnect()
+                .first()
+                .sink { [weak self] _ in
+                    self?.activeLinkCode = nil
+                }
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    /// Redeem a link code to join an existing share identity from another device.
+    /// If this device is already registered, the caller must confirm before invoking
+    /// with `confirmed: true` — this will auto-leave the leaderboard for the old code.
+    func redeemLinkCode(_ linkCode: String, deviceLabel: String? = nil, confirmed: Bool = false) async {
+        if isRegistered && !confirmed {
+            // Caller should show confirmation dialog and retry with confirmed: true
+            return
+        }
+
+        // If already registered, leave leaderboard for old identity first
+        if isRegistered && confirmed {
+            if leaderboardOptIn {
+                await leaveLeaderboard()
+            }
+        }
+
+        do {
+            let response = try await client.redeemLinkToken(linkCode: linkCode, deviceLabel: deviceLabel)
+            myShareCode = response.shareCode
+            myShareURL = "\(CloudSharingClient.baseURL)/share/\(response.shareCode)"
+            myDisplayName = Self.sanitizeDisplayName(response.displayName).uppercased()
+            saveSecretToken(response.secretToken)
+            isRegistered = true
+            sharingEnabled = true
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    /// Unlink a remote device from the shared identity. Cannot unlink self.
+    func unlinkDevice(_ targetDeviceId: String) async {
+        guard targetDeviceId != deviceId else { return }
+        guard let token = getSecretToken() else {
+            lastError = "Secret token missing"
+            return
+        }
+
+        do {
+            try await client.unlinkDevice(shareCode: myShareCode, secretToken: token, deviceId: targetDeviceId)
+            linkedDevices.removeAll { $0.deviceId == targetDeviceId }
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
     }
 
     // MARK: - Leaderboard

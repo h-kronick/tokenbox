@@ -3,6 +3,7 @@
 
 import { EventEmitter } from 'node:events';
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { getDb, getConfig, setConfig } from '../../skill/lib/db.mjs';
 import { currentPSTDate } from './formatting.mjs';
 
@@ -21,6 +22,7 @@ export class SharingManager extends EventEmitter {
     this._fetchTimer = null;
     this._lastPushTime = 0;
     this._friends = []; // { code, displayName, nickname, tokens, todayDate }
+    this._devices = []; // { deviceId, label, lastPush }
   }
 
   start() {
@@ -28,6 +30,20 @@ export class SharingManager extends EventEmitter {
     if (process.platform === 'darwin') {
       this._loadMacDefaults();
     }
+
+    // Ensure this device has a stable deviceId
+    let deviceId = getConfig('deviceId');
+    if (!deviceId) {
+      deviceId = randomUUID();
+      setConfig('deviceId', deviceId);
+    }
+    this._deviceId = deviceId;
+
+    // Load persisted device list
+    try {
+      const devicesJson = getConfig('devices');
+      if (devicesJson) this._devices = JSON.parse(devicesJson);
+    } catch {}
 
     // Load friends from settings (macOS defaults may have already populated these)
     this._friends = (this._settings.getFriends() || []).map(f => ({
@@ -73,6 +89,109 @@ export class SharingManager extends EventEmitter {
     try { return getConfig('secretToken'); } catch { return null; }
   }
 
+  getDeviceId() {
+    return this._deviceId || null;
+  }
+
+  getDevices() {
+    return this._devices;
+  }
+
+  async createLinkCode() {
+    const code = this.getShareCode();
+    const token = this._getSecretToken();
+    if (!code || !token) throw new Error('Not registered for sharing');
+
+    const res = await fetch(`${API_BASE}/link/create`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ shareCode: code }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Failed: ${res.status}`);
+    }
+
+    const data = await res.json();
+    return data.linkCode;
+  }
+
+  async redeemLinkCode(linkCode, deviceLabel) {
+    const res = await fetch(`${API_BASE}/link/redeem`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        linkCode,
+        ...(deviceLabel ? { deviceLabel } : {}),
+      }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Failed: ${res.status}`);
+    }
+
+    const data = await res.json();
+
+    // Device B already registered: leave old leaderboard if opted in
+    if (this.isRegistered() && this.isLeaderboardOptIn()) {
+      try { await this.leaveLeaderboard(); } catch {}
+    }
+
+    // Save new credentials (overwrites any existing registration)
+    setConfig('shareCode', data.shareCode);
+    setConfig('secretToken', data.secretToken);
+    setConfig('displayName', data.displayName);
+    setConfig('deviceId', data.deviceId);
+    this._deviceId = data.deviceId;
+
+    // Start push timer if not already running
+    if (!this._pushTimer) {
+      this._pushTimer = setInterval(() => this._push(), PUSH_INTERVAL_MS);
+    }
+
+    // Trigger an immediate push to get the device list back
+    this._lastPushTime = 0;
+    await this._push();
+
+    return {
+      shareCode: data.shareCode,
+      displayName: data.displayName,
+      deviceId: data.deviceId,
+    };
+  }
+
+  async unlinkDevice(deviceId) {
+    const code = this.getShareCode();
+    const token = this._getSecretToken();
+    if (!code || !token) throw new Error('Not registered for sharing');
+
+    const res = await fetch(`${API_BASE}/unlink`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ shareCode: code, deviceId }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Failed: ${res.status}`);
+    }
+
+    // Remove from local cache
+    this._devices = this._devices.filter(d => d.deviceId !== deviceId);
+    setConfig('devices', JSON.stringify(this._devices));
+    this.emit('devices-changed', this._devices);
+
+    return { ok: true };
+  }
+
   async register(displayName) {
     const res = await fetch(`${API_BASE}/register`, {
       method: 'POST',
@@ -90,6 +209,16 @@ export class SharingManager extends EventEmitter {
     setConfig('shareCode', data.shareCode);
     setConfig('secretToken', data.secretToken);
     setConfig('displayName', displayName);
+
+    // Ensure deviceId is set for first push
+    if (!this._deviceId) {
+      let deviceId = getConfig('deviceId');
+      if (!deviceId) {
+        deviceId = randomUUID();
+        setConfig('deviceId', deviceId);
+      }
+      this._deviceId = deviceId;
+    }
 
     // Start push timer
     if (!this._pushTimer) {
@@ -246,6 +375,7 @@ export class SharingManager extends EventEmitter {
         },
         body: JSON.stringify({
           shareCode: code,
+          deviceId: this._deviceId,
           todayTokens: tokens.today,
           todayDate: today,
           tokensByModel,
@@ -260,6 +390,19 @@ export class SharingManager extends EventEmitter {
       // Silently absorb 429s
       if (res.status === 429) return;
       if (!res.ok) return;
+
+      // Read response body for device list and displayName
+      try {
+        const body = await res.json();
+        if (body.displayName) {
+          setConfig('displayName', body.displayName);
+        }
+        if (Array.isArray(body.devices)) {
+          this._devices = body.devices;
+          setConfig('devices', JSON.stringify(body.devices));
+          this.emit('devices-changed', this._devices);
+        }
+      } catch {}
     } catch {
       // Network errors are silent
     }
@@ -459,6 +602,12 @@ export class SharingManager extends EventEmitter {
     }
     if (lbEmail && !getConfig('leaderboardEmail')) {
       try { setConfig('leaderboardEmail', lbEmail); } catch {}
+    }
+
+    // Seed deviceId from UserDefaults
+    const macDeviceId = _readMacDefault('deviceId');
+    if (macDeviceId && !getConfig('deviceId')) {
+      try { setConfig('deviceId', macDeviceId); } catch {}
     }
 
     // Read friends from UserDefaults

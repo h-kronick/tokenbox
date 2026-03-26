@@ -189,6 +189,10 @@ struct SharingTab: View {
     @State private var isEditingName = false
     @State private var editedName = ""
     @State private var nameUpdateError = ""
+    @State private var showLinkSheet = false
+    @State private var linkCodeInput = ""
+    @State private var showAlreadyRegisteredAlert = false
+    @State private var pendingLinkCode = ""
 
     var body: some View {
         Form {
@@ -330,6 +334,77 @@ struct SharingTab: View {
                     }
                 }
 
+                Section("Linked Devices") {
+                    Text("Use Claude Code on multiple machines? Link them to combine your stats.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    if sharingManager.linkedDevices.isEmpty {
+                        Text("This device only")
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(sharingManager.linkedDevices) { device in
+                            HStack(spacing: 8) {
+                                Image(systemName: device.deviceId == sharingManager.deviceId ? "desktopcomputer" : "display")
+                                    .foregroundColor(.secondary)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(device.label ?? String(device.deviceId.prefix(8)))
+                                        .fontWeight(device.deviceId == sharingManager.deviceId ? .semibold : .regular)
+                                    if let lastPush = device.lastPush {
+                                        Text("Last active \(Self.relativeTime(from: lastPush))")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                if device.deviceId == sharingManager.deviceId {
+                                    Text("(this device)")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                Spacer()
+                                if device.deviceId != sharingManager.deviceId {
+                                    Button("Unlink") {
+                                        Task { await sharingManager.unlinkDevice(device.deviceId) }
+                                    }
+                                    .foregroundColor(.red)
+                                    .controlSize(.small)
+                                }
+                            }
+                        }
+                    }
+
+                    if let code = sharingManager.activeLinkCode {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(code)
+                                .font(.system(.body, design: .monospaced))
+                                .textSelection(.enabled)
+                                .padding(6)
+                                .background(Color(nsColor: .controlBackgroundColor))
+                                .cornerRadius(4)
+                            HStack {
+                                Button("Copy") {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(code, forType: .string)
+                                }
+                                .controlSize(.small)
+                                Text("Expires in 15 minutes")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    } else {
+                        Button("Link Another Device") {
+                            Task { await sharingManager.createLinkCode() }
+                        }
+                        .disabled(sharingManager.isGeneratingLink)
+                    }
+
+                    Button("Link to Existing Device") {
+                        linkCodeInput = ""
+                        showLinkSheet = true
+                    }
+                }
+
                 Section("Friends") {
                     HStack {
                         TextField("Paste a share code or link...", text: $friendInput)
@@ -385,7 +460,7 @@ struct SharingTab: View {
                         .font(.caption)
                     if error.contains("re-register") || error.contains("token") {
                         Button("Reset & Re-register") {
-                            sharingManager.resetRegistration()
+                            Task { await sharingManager.resetRegistration() }
                         }
                         .foregroundColor(.red)
                     }
@@ -394,6 +469,56 @@ struct SharingTab: View {
         }
         .formStyle(.grouped)
         .padding()
+        .sheet(isPresented: $showLinkSheet) {
+            VStack(spacing: 16) {
+                Text("Link to Existing Device")
+                    .font(.headline)
+                Text("Enter the link code from your other device:")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                TextField("TB-XXX-XXXXXXXXXXXX", text: $linkCodeInput)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(width: 280)
+                HStack {
+                    Button("Cancel") {
+                        showLinkSheet = false
+                    }
+                    Button("Link") {
+                        let code = linkCodeInput.trimmingCharacters(in: .whitespaces)
+                        guard !code.isEmpty else { return }
+                        if sharingManager.isRegistered {
+                            pendingLinkCode = code
+                            showLinkSheet = false
+                            showAlreadyRegisteredAlert = true
+                        } else {
+                            Task {
+                                await sharingManager.redeemLinkCode(code)
+                                showLinkSheet = false
+                            }
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(linkCodeInput.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            .padding(24)
+            .frame(width: 360)
+        }
+        .alert("Already Registered", isPresented: $showAlreadyRegisteredAlert) {
+            Button("Cancel", role: .cancel) {
+                pendingLinkCode = ""
+            }
+            Button("Link Anyway", role: .destructive) {
+                let code = pendingLinkCode
+                pendingLinkCode = ""
+                Task {
+                    await sharingManager.redeemLinkCode(code, confirmed: true)
+                }
+            }
+        } message: {
+            Text("This device is already registered with a share code. Linking will switch to the new identity and leave the leaderboard for your current code.")
+        }
     }
 
     private func saveDisplayName() {

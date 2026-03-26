@@ -271,7 +271,25 @@ export async function main(overrides = {}) {
         const result = await sharing.register(name);
         box.destroy();
         activeOverlay = null;
-        showRegisteredSharingOverlay();
+
+        // Show success with multi-device hint
+        const successBox = createOverlay('Registered!', 11);
+        successBox.setContent(
+          '\n  {green-fg}✔{/green-fg} {bold}Sharing enabled!{/bold}\n\n' +
+          `  Share code: {bold}${result.shareCode}{/bold}\n` +
+          `  URL: ${result.shareURL}\n\n` +
+          '  {bold}Multi-device:{/bold} Use Claude Code on multiple machines?\n' +
+          '  Link them with {bold}[k]{/bold} in Sharing, or run {bold}tokenbox link{/bold}.\n\n' +
+          '  {bold}[Enter]{/bold} Continue    {bold}[Esc]{/bold} Close'
+        );
+        successBox.focus();
+        screen.render();
+
+        successBox.key(['enter', 'escape'], () => {
+          successBox.destroy();
+          activeOverlay = null;
+          showRegisteredSharingOverlay();
+        });
       } catch (err) {
         status.setContent(`Error: ${err.message}`);
         screen.render();
@@ -290,9 +308,24 @@ export async function main(overrides = {}) {
     const code = sharing.getShareCode();
     const url = sharing.getShareURL();
     const friends = sharing.getFriends();
+    const devices = sharing.getDevices();
 
     let content = `Your share code: {bold}${code}{/bold}\n`;
     content += `URL: ${url}\n\n`;
+
+    // Linked Devices section
+    if (devices.length > 0) {
+      content += `{bold}Linked Devices:{/bold}\n`;
+      const myDeviceId = sharing.getDeviceId();
+      devices.forEach((d, i) => {
+        const label = d.label || 'Device';
+        const isMe = d.deviceId === myDeviceId;
+        const suffix = isMe ? ' {yellow-fg}(this device){/yellow-fg}' : '';
+        const lastPush = d.lastPush ? ` — ${d.lastPush.slice(0, 10)}` : '';
+        content += `  ${i + 1}. ${label}${suffix}${lastPush}\n`;
+      });
+      content += '\n';
+    }
 
     if (friends.length > 0) {
       content += `{bold}Friends:{/bold}\n`;
@@ -306,9 +339,11 @@ export async function main(overrides = {}) {
       content += '\n';
     }
 
-    content += '[a] Add friend  [d] Remove friend  [Esc] Close';
+    content += '[a] Add friend  [d] Remove friend\n';
+    content += '[k] Link device  [u] Unlink device  [Esc] Close';
 
-    const box = createOverlay('Sharing', Math.min(friends.length + 10, 20));
+    const totalLines = friends.length + devices.length + 12;
+    const box = createOverlay('Sharing', Math.min(totalLines, 24));
     box.setContent(content);
     screen.render();
 
@@ -321,7 +356,213 @@ export async function main(overrides = {}) {
       showRemoveFriendPrompt(box, friends);
     });
 
+    box.key(['k'], () => {
+      box.destroy();
+      activeOverlay = null;
+      showLinkDevicePrompt();
+    });
+
+    box.key(['u'], () => {
+      if (devices.length === 0) return;
+      box.destroy();
+      activeOverlay = null;
+      showUnlinkDevicePrompt(devices);
+    });
+
     box.focus();
+  }
+
+  function showLinkDevicePrompt() {
+    const box = createOverlay('Link Device', 10);
+    box.setContent(
+      '\n  {bold}[1]{/bold} Generate a link code (share with another device)\n' +
+      '  {bold}[2]{/bold} Enter a link code (received from another device)\n\n' +
+      '  {bold}[Esc]{/bold} Cancel'
+    );
+    box.focus();
+    screen.render();
+
+    box.key(['1'], async () => {
+      box.setContent('\n  {yellow-fg}Generating link code...{/yellow-fg}');
+      screen.render();
+      try {
+        const linkCode = await sharing.createLinkCode();
+        box.setContent(
+          '\n  {green-fg}✔{/green-fg} Link code generated:\n\n' +
+          `  {bold}${linkCode}{/bold}\n\n` +
+          '  Enter this on your other device within 15 minutes.\n' +
+          '  Run: {bold}tokenbox link ' + linkCode + '{/bold}\n\n' +
+          '  {bold}[Esc]{/bold} Close'
+        );
+        box.height = 12;
+        screen.render();
+      } catch (err) {
+        box.setContent(`\n  {red-fg}✗ ${err.message}{/red-fg}\n\n  {bold}[Esc]{/bold} Close`);
+        screen.render();
+      }
+    });
+
+    box.key(['2'], () => {
+      box.destroy();
+      activeOverlay = null;
+      showEnterLinkCodePrompt();
+    });
+  }
+
+  function showEnterLinkCodePrompt() {
+    const box = createOverlay('Enter Link Code', 10);
+
+    const info = blessed.box({
+      parent: box,
+      top: 0,
+      left: 2,
+      right: 2,
+      height: 2,
+      content: 'Paste the link code from your other device:',
+      style: { bg: 'black', fg: 'white' },
+    });
+
+    const prompt = blessed.textbox({
+      parent: box,
+      top: 2,
+      left: 2,
+      right: 2,
+      height: 3,
+      border: { type: 'line' },
+      label: ' Link Code (TB-XXX-...) ',
+      style: {
+        border: { fg: 'white' },
+        bg: 'black',
+        fg: 'white',
+      },
+      inputOnFocus: true,
+    });
+
+    const status = blessed.box({
+      parent: box,
+      top: 6,
+      left: 2,
+      right: 2,
+      height: 2,
+      content: '',
+      style: { bg: 'black', fg: 'yellow' },
+    });
+
+    prompt.focus();
+    screen.render();
+
+    prompt.on('submit', async (value) => {
+      const code = (value || '').trim();
+      if (!code) {
+        status.setContent('Link code cannot be empty');
+        screen.render();
+        prompt.focus();
+        return;
+      }
+
+      status.setContent('Linking device...');
+      screen.render();
+
+      try {
+        const result = await sharing.redeemLinkCode(code);
+        box.destroy();
+        activeOverlay = null;
+
+        const successBox = createOverlay('Linked!', 9);
+        successBox.setContent(
+          '\n  {green-fg}✔{/green-fg} {bold}Device linked successfully!{/bold}\n\n' +
+          `  Account:  {bold}${result.displayName}{/bold}\n` +
+          `  Device:   ${result.deviceId.slice(0, 8)}...\n\n` +
+          '  {bold}[Esc]{/bold} Close'
+        );
+        successBox.focus();
+        screen.render();
+      } catch (err) {
+        status.setContent(`{red-fg}Error: ${err.message}{/red-fg}`);
+        screen.render();
+        prompt.focus();
+      }
+    });
+
+    prompt.on('cancel', () => {
+      box.destroy();
+      activeOverlay = null;
+      screen.render();
+    });
+  }
+
+  function showUnlinkDevicePrompt(devices) {
+    const myDeviceId = sharing.getDeviceId();
+    const box = createOverlay('Unlink Device', Math.min(devices.length + 8, 18));
+
+    let content = '{bold}Select device to unlink:{/bold}\n\n';
+    devices.forEach((d, i) => {
+      const label = d.label || 'Device';
+      const isMe = d.deviceId === myDeviceId;
+      const suffix = isMe ? ' {yellow-fg}(this device){/yellow-fg}' : '';
+      content += `  ${i + 1}. ${label}${suffix}\n`;
+    });
+    content += '\n  Enter number, or {bold}[Esc]{/bold} to cancel';
+
+    box.setContent(content);
+    box.focus();
+    screen.render();
+
+    const numPrompt = blessed.textbox({
+      parent: box,
+      bottom: 1,
+      left: 2,
+      right: 2,
+      height: 3,
+      border: { type: 'line' },
+      label: ' Device # ',
+      style: {
+        border: { fg: 'white' },
+        bg: 'black',
+        fg: 'white',
+      },
+      inputOnFocus: true,
+    });
+
+    numPrompt.focus();
+    screen.render();
+
+    numPrompt.on('submit', async (value) => {
+      const idx = parseInt(value, 10) - 1;
+      if (idx < 0 || idx >= devices.length) {
+        numPrompt.destroy();
+        screen.render();
+        return;
+      }
+
+      const target = devices[idx];
+      if (target.deviceId === myDeviceId) {
+        numPrompt.destroy();
+        box.setContent(box.getContent() + '\n\n  {red-fg}Cannot unlink this device from itself.{/red-fg}');
+        screen.render();
+        return;
+      }
+
+      numPrompt.destroy();
+      box.setContent('\n  {yellow-fg}Unlinking...{/yellow-fg}');
+      screen.render();
+
+      try {
+        await sharing.unlinkDevice(target.deviceId);
+        box.destroy();
+        activeOverlay = null;
+        showRegisteredSharingOverlay();
+      } catch (err) {
+        box.setContent(`\n  {red-fg}✗ ${err.message}{/red-fg}\n\n  {bold}[Esc]{/bold} Close`);
+        screen.render();
+      }
+    });
+
+    numPrompt.on('cancel', () => {
+      box.destroy();
+      activeOverlay = null;
+      screen.render();
+    });
   }
 
   function showAddFriendPrompt(parentBox) {
