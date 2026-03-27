@@ -25,6 +25,7 @@ export class SharingManager extends EventEmitter {
     this._friends = []; // { code, displayName, nickname, tokens, todayDate }
     this._devices = []; // { deviceId, label, lastPush }
     this._serverAggregate = null; // server-side aggregate across all linked devices
+    this._awaitingDayRefresh = false; // suppresses stale data until data store refreshes after PST day boundary
   }
 
   start() {
@@ -358,6 +359,9 @@ export class SharingManager extends EventEmitter {
   forcePush() {
     this._lastPushTime = 0;
     this._serverAggregate = null;
+    // Clear the stale-data suppression flag — the data store has refreshed
+    // for the new day, so the next push will have correct today values.
+    this._awaitingDayRefresh = false;
     this._push();
   }
 
@@ -376,9 +380,16 @@ export class SharingManager extends EventEmitter {
     // Detect PST day change: if push fires before the periodic day-boundary check
     // refreshes the data store, todayTokens still holds yesterday's value.
     // Send 0 for the new day so the server doesn't write stale data.
+    // The _awaitingDayRefresh flag keeps sending 0 until the data store actually
+    // refreshes (day-boundary event), preventing the second push from sending
+    // stale cached values with the new date.
     const dayChanged = this._lastPushedPSTDate && today !== this._lastPushedPSTDate;
-    const effectiveTokens = dayChanged ? 0 : tokens.today;
-    const effectiveTokensByModel = dayChanged ? {} : this._data.getTokensByModel('today');
+    if (dayChanged) {
+      this._awaitingDayRefresh = true;
+    }
+    const suppressStaleData = dayChanged || this._awaitingDayRefresh;
+    const effectiveTokens = suppressStaleData ? 0 : tokens.today;
+    const effectiveTokensByModel = suppressStaleData ? {} : this._data.getTokensByModel('today');
 
     // Populate per-model breakdown for non-today periods (cumulative, not day-sensitive)
     const weekByModel = this._data.getTokensByModel('week');
