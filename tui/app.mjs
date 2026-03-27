@@ -74,6 +74,11 @@ export async function main(overrides = {}) {
     }
   });
 
+  data.on('day-boundary', () => {
+    // Force an immediate push so the server returns a fresh aggregate for the new day
+    sharing.forcePush();
+  });
+
   // --- Sharing events ---
 
   sharing.on('friends-changed', (friends) => {

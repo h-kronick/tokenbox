@@ -43,6 +43,7 @@ final class SharingManager: ObservableObject {
     private var persistCancellables: Set<AnyCancellable> = []
     private var lastPushedTokens: Int = 0
     private var lastPushTime: Date = .distantPast
+    private var lastPushedPSTDate: String = ""
     private var isSyncing: Bool = false
     private let secretTokenKey = "sharingSecretToken"
     private let leaderboardEmailKey = "leaderboardEmail"
@@ -298,20 +299,28 @@ final class SharingManager: ObservableObject {
 
         let todayDate = Self.dayFormatter.string(from: now)
 
+        // Detect PST day change: if push fires before checkDayBoundary refreshes the
+        // data store, todayTokens still holds yesterday's value. Send 0 for the new day
+        // so the server doesn't write stale data into the new daily_tokens doc.
+        let dayChanged = !lastPushedPSTDate.isEmpty && todayDate != lastPushedPSTDate
+        let effectiveTokens = dayChanged ? 0 : todayTokens
+        let effectiveTokensByModel = dayChanged ? [:] : Self.buildModelMap(todayByModel)
+
         do {
             let pushResponse = try await client.push(
                 shareCode: myShareCode,
                 secretToken: token,
-                todayTokens: todayTokens,
+                todayTokens: effectiveTokens,
                 todayDate: todayDate,
-                tokensByModel: Self.buildModelMap(todayByModel),
+                tokensByModel: effectiveTokensByModel,
                 weekByModel: Self.buildModelMap(weekByModel),
                 monthByModel: Self.buildModelMap(monthByModel),
                 allTimeByModel: Self.buildModelMap(allTimeByModel),
                 displayName: displayName ?? myDisplayName,
                 deviceId: deviceId
             )
-            lastPushedTokens = todayTokens
+            lastPushedTokens = effectiveTokens
+            lastPushedPSTDate = todayDate
             lastPushTime = now
             lastError = nil
 
@@ -630,6 +639,16 @@ final class SharingManager: ObservableObject {
 
     // MARK: - Server Aggregate Helpers
 
+    /// Clear stale server aggregate on PST day boundary so the display falls back
+    /// to local (reset) data until the next push response arrives with fresh values.
+    func clearServerAggregate() {
+        guard serverAggregate != nil else { return }
+        serverAggregate = nil
+        localTokensAtAggregateSnapshot = 0
+        lastPushedTokens = 0 // Ensure next push fires even if local todayTokens is 0
+        NotificationCenter.default.post(name: .serverAggregateDidChange, object: nil)
+    }
+
     /// Whether this device has linked peers and server aggregate data is available.
     var hasServerAggregate: Bool {
         !linkedDevices.isEmpty && serverAggregate != nil
@@ -727,6 +746,7 @@ extension Notification.Name {
     static let displayNameDidChange = Notification.Name("TokenBoxDisplayNameDidChange")
     static let displaySettingsDidChange = Notification.Name("TokenBoxDisplaySettingsDidChange")
     static let serverAggregateDidChange = Notification.Name("TokenBoxServerAggregateDidChange")
+    static let dayBoundaryDidChange = Notification.Name("TokenBoxDayBoundaryDidChange")
 }
 
 // MARK: - Errors

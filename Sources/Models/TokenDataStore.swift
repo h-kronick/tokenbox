@@ -251,6 +251,9 @@ class TokenDataStore: ObservableObject {
 
         if currentPSTDate != lastRefreshPSTDate {
             lastRefreshPSTDate = currentPSTDate
+            // Clear stale server aggregate so the display falls back to local (reset) data
+            // until the next push response arrives with fresh aggregate values.
+            NotificationCenter.default.post(name: .dayBoundaryDidChange, object: nil)
             refresh()
         }
     }

@@ -296,6 +296,20 @@ struct MainWindowView: View {
             refreshValues()
             refreshContext()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .dayBoundaryDidChange)) { _ in
+            sharingManager.clearServerAggregate()
+            // Force an immediate push so the server returns a fresh aggregate
+            Task {
+                await sharingManager.pushMyTokens(
+                    todayTokens: dataStore.todayTokens,
+                    todayByModel: dataStore.todayByModel,
+                    weekByModel: dataStore.weekByModel,
+                    monthByModel: dataStore.monthByModel,
+                    allTimeByModel: dataStore.allTimeByModel,
+                    force: true
+                )
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .displayNameDidChange)) { _ in
             Task {
                 await sharingManager.pushMyTokens(

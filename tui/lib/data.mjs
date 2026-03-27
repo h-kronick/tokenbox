@@ -481,7 +481,10 @@ export class DataManager extends EventEmitter {
         this._lastPSTDate = now;
         this._realtimeDelta = 0;
         this._firstLiveEvent = true;
+        this._serverAggregate = null; // Clear stale aggregate from previous day
+        this._localTokensAtAggregateSnapshot = 0;
         this._refreshTokens();
+        this.emit('day-boundary'); // Signal sharing layer to force-push
       }
     }, 60_000);
   }

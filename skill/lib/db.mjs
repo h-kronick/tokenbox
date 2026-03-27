@@ -1,13 +1,17 @@
 // SQLite interface for TokenBox — uses better-sqlite3
-// Database location: ~/Library/Application Support/TokenBox/tokenbox.db
+// Database location: platform-aware (macOS: ~/Library/Application Support/TokenBox/, Linux: ~/.local/share/tokenbox/)
 
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { mkdirSync } from 'node:fs';
 import Database from 'better-sqlite3';
 
-const DB_DIR = join(homedir(), 'Library', 'Application Support', 'TokenBox');
-const DB_PATH = join(DB_DIR, 'tokenbox.db');
+function defaultDbDir() {
+  if (process.platform === 'win32') return join(process.env.APPDATA || join(homedir(), 'AppData', 'Roaming'), 'TokenBox');
+  if (process.platform === 'darwin') return join(homedir(), 'Library', 'Application Support', 'TokenBox');
+  return join(process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share'), 'tokenbox');
+}
+const DB_PATH = join(defaultDbDir(), 'tokenbox.db');
 
 let _db = null;
 

@@ -21,6 +21,7 @@ export class SharingManager extends EventEmitter {
     this._pushTimer = null;
     this._fetchTimer = null;
     this._lastPushTime = 0;
+    this._lastPushedPSTDate = null;
     this._friends = []; // { code, displayName, nickname, tokens, todayDate }
     this._devices = []; // { deviceId, label, lastPush }
     this._serverAggregate = null; // server-side aggregate across all linked devices
@@ -353,6 +354,13 @@ export class SharingManager extends EventEmitter {
     });
   }
 
+  /** Force an immediate push, bypassing throttle. Used on day boundary. */
+  forcePush() {
+    this._lastPushTime = 0;
+    this._serverAggregate = null;
+    this._push();
+  }
+
   async _push() {
     // Throttle
     const now = Date.now();
@@ -365,8 +373,14 @@ export class SharingManager extends EventEmitter {
     const tokens = this._data.getTokens();
     const today = currentPSTDate();
 
-    // Populate per-model breakdown for all periods (matches macOS buildModelMap)
-    const tokensByModel = this._data.getTokensByModel('today');
+    // Detect PST day change: if push fires before the periodic day-boundary check
+    // refreshes the data store, todayTokens still holds yesterday's value.
+    // Send 0 for the new day so the server doesn't write stale data.
+    const dayChanged = this._lastPushedPSTDate && today !== this._lastPushedPSTDate;
+    const effectiveTokens = dayChanged ? 0 : tokens.today;
+    const effectiveTokensByModel = dayChanged ? {} : this._data.getTokensByModel('today');
+
+    // Populate per-model breakdown for non-today periods (cumulative, not day-sensitive)
     const weekByModel = this._data.getTokensByModel('week');
     const monthByModel = this._data.getTokensByModel('month');
     const allTimeByModel = this._data.getTokensByModel('allTime');
@@ -381,9 +395,9 @@ export class SharingManager extends EventEmitter {
         body: JSON.stringify({
           shareCode: code,
           deviceId: this._deviceId,
-          todayTokens: tokens.today,
+          todayTokens: effectiveTokens,
           todayDate: today,
-          tokensByModel,
+          tokensByModel: effectiveTokensByModel,
           weekByModel,
           monthByModel,
           allTimeByModel,
@@ -391,6 +405,7 @@ export class SharingManager extends EventEmitter {
       });
 
       this._lastPushTime = Date.now();
+      this._lastPushedPSTDate = today;
 
       // Silently absorb 429s
       if (res.status === 429) return;
