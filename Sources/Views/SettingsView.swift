@@ -358,8 +358,8 @@ struct SharingTab: View {
                                                     .foregroundColor(.secondary)
                                             }
                                         }
-                                        if let lastPush = device.lastPush {
-                                            Text("Last active \(Self.relativeTime(from: lastPush))")
+                                        if let lastActive = device.lastTokenChange ?? device.lastPush {
+                                            Text("Last active \(Self.relativeTime(from: lastActive))")
                                                 .font(.caption2)
                                                 .foregroundColor(.secondary)
                                         }

@@ -95,8 +95,9 @@ struct CloudFriend: Codable, Equatable, Sendable, Identifiable {
 struct LinkedDevice: Codable, Equatable, Sendable, Identifiable {
     let deviceId: String
     let label: String?
-    let lastPush: String?       // ISO 8601 datetime of last push
-    let todayTokens: Int?       // today's total tokens for this device
+    let lastPush: String?           // ISO 8601 datetime of last push (updates every 30s)
+    let lastTokenChange: String?    // ISO 8601 datetime of last actual token change
+    let todayTokens: Int?           // today's total tokens for this device
     let tokensByModel: [String: Int]?  // per-model breakdown (opus, sonnet, haiku)
     var id: String { deviceId }
 }
