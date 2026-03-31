@@ -44,10 +44,6 @@ final class SharingManager: ObservableObject {
     private var lastPushedTokens: Int = 0
     private var lastPushTime: Date = .distantPast
     private var lastPushedPSTDate: String = ""
-    /// Set when a PST day change is detected in pushMyTokens before the data store
-    /// has refreshed. While true, pushes send 0 tokens to prevent stale cached
-    /// yesterday data from being written into the new day's daily_tokens doc.
-    private var awaitingDayBoundaryRefresh: Bool = false
     private var isSyncing: Bool = false
     private let secretTokenKey = "sharingSecretToken"
     private let leaderboardEmailKey = "leaderboardEmail"
@@ -101,13 +97,6 @@ final class SharingManager: ObservableObject {
             .sink { UserDefaults.standard.set($0, forKey: "leaderboardUsername") }
             .store(in: &persistCancellables)
 
-        // Clear the stale-data suppression flag when the data store refreshes
-        // after a PST day boundary, so the next push sends correct today values.
-        NotificationCenter.default.publisher(for: .dayBoundaryDidChange)
-            .sink { [weak self] _ in
-                self?.awaitingDayBoundaryRefresh = false
-            }
-            .store(in: &persistCancellables)
     }
 
     // MARK: - Registration
@@ -314,16 +303,11 @@ final class SharingManager: ObservableObject {
         // Detect PST day change: if push fires before checkDayBoundary refreshes the
         // data store, todayTokens still holds yesterday's value. Send 0 for the new day
         // so the server doesn't write stale data into the new daily_tokens doc.
-        // The awaitingDayBoundaryRefresh flag keeps sending 0 until the data store
-        // actually refreshes (posts dayBoundaryDidChange), preventing the second push
-        // from sending stale cached values with the new date.
+        // Server-side stale-from-yesterday detection handles subsequent pushes if
+        // stale data slips through before the data store refreshes.
         let dayChanged = !lastPushedPSTDate.isEmpty && todayDate != lastPushedPSTDate
-        if dayChanged {
-            awaitingDayBoundaryRefresh = true
-        }
-        let suppressStaleData = dayChanged || awaitingDayBoundaryRefresh
-        let effectiveTokens = suppressStaleData ? 0 : todayTokens
-        let effectiveTokensByModel = suppressStaleData ? [:] : Self.buildModelMap(todayByModel)
+        let effectiveTokens = dayChanged ? 0 : todayTokens
+        let effectiveTokensByModel = dayChanged ? [:] : Self.buildModelMap(todayByModel)
 
         do {
             let pushResponse = try await client.push(
